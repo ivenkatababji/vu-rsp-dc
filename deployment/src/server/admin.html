@@ -59,9 +59,17 @@
     .page { display: none; }
     .page.active { display: block; }
 
-    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 0.5rem 0; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0; }
+    .page-head-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .page-head-actions { display: flex; align-items: center; gap: 0.75rem; }
+    .page-head-actions #updated { font-size: 0.8rem; color: var(--muted); }
     .subtitle { color: var(--muted); font-size: 0.875rem; margin-bottom: 1.5rem; }
-    .refresh-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
     button {
       background: var(--accent);
       color: var(--bg);
@@ -95,6 +103,24 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
+    .section-head-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .section-head-row h2 { margin: 0; }
+    .session-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .toggle-label input { cursor: pointer; }
     .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
     .config-item {
       padding: 0.75rem;
@@ -194,12 +220,14 @@
     </nav>
     <main class="main">
       <div id="page-dashboard" class="page">
-        <h1>Dashboard</h1>
-        <p class="subtitle">Server config, stats, and active sessions</p>
-        <div class="refresh-row">
-          <button type="button" id="btn-refresh">Refresh</button>
-          <span id="updated"></span>
+        <div class="page-head-row">
+          <h1>Dashboard</h1>
+          <div class="page-head-actions">
+            <button type="button" id="btn-refresh">Refresh</button>
+            <span id="updated"></span>
+          </div>
         </div>
+        <p class="subtitle">Server config, stats, and active sessions</p>
         <div id="dash-error" class="error" style="display: none;"></div>
         <section class="section">
           <h2>Configuration</h2>
@@ -210,7 +238,17 @@
           <div id="dash-stats" class="stats-grid loading">Loading…</div>
         </section>
         <section class="section">
-          <h2>Active sessions</h2>
+          <div class="section-head-row">
+            <h2>Active sessions</h2>
+            <div class="session-actions">
+              <label class="toggle-label">
+                <input type="checkbox" id="toggle-expired" />
+                <span>Show expired</span>
+              </label>
+              <button type="button" id="btn-prune" class="secondary">Prune expired</button>
+            </div>
+          </div>
+          <div id="prune-result" class="success" style="display: none;"></div>
           <div id="dash-sessions" class="loading">Loading…</div>
         </section>
       </div>
@@ -236,6 +274,11 @@
               <label for="cfg-timeout">Session timeout (seconds)</label>
               <input type="number" id="cfg-timeout" name="session_timeout_seconds" min="0">
               <div class="hint">0 = auto (30 × rounds per game). Or set seconds for a fixed timeout.</div>
+            </div>
+            <div class="form-group">
+              <label for="cfg-retention">Retention (seconds)</label>
+              <input type="number" id="cfg-retention" name="retention_seconds" min="0">
+              <div class="hint">How long to keep expired sessions before pruning. Default 604800 (7 days).</div>
             </div>
             <div class="form-actions">
               <button type="submit" id="btn-save">Save changes</button>
@@ -292,10 +335,11 @@
       const errEl = $('dash-error');
       errEl.style.display = 'none';
       try {
+        const includeExpired = $('toggle-expired').checked;
         const [cfg, stats, sessions] = await Promise.all([
           fetch('/admin/cfg').then(r => r.ok ? r.json() : Promise.reject(new Error('Config failed'))),
           fetch('/admin/monitor/game_stats').then(r => r.ok ? r.json() : Promise.reject(new Error('Stats failed'))),
-          fetch('/admin/monitor/sessions').then(r => r.ok ? r.json() : Promise.reject(new Error('Sessions failed')))
+          fetch('/admin/monitor/sessions?include_expired=' + includeExpired).then(r => r.ok ? r.json() : Promise.reject(new Error('Sessions failed')))
         ]);
 
         $('dash-config').innerHTML = `
@@ -310,6 +354,10 @@
           <div class="config-item">
             <label>Session timeout</label>
             <div class="value">${effectiveTimeoutDisplay(cfg)}</div>
+          </div>
+          <div class="config-item">
+            <label>Retention (before prune)</label>
+            <div class="value">${fmtDuration(cfg.retention_seconds)}</div>
           </div>
         `;
         $('dash-config').className = 'config-grid';
@@ -326,13 +374,13 @@
         $('dash-stats').className = 'stats-grid';
 
         if (sessions.length === 0) {
-          $('dash-sessions').innerHTML = '<p class="muted">No active sessions.</p>';
+          $('dash-sessions').innerHTML = '<p class="muted">' + (includeExpired ? 'No sessions.' : 'No active sessions.') + '</p>';
         } else {
           $('dash-sessions').innerHTML = `
             <table>
               <thead>
                 <tr>
-                  <th>Session</th><th>User</th><th>Round</th><th>Score</th><th>Status</th><th>Created</th><th>Last activity</th>
+                  <th>Session</th><th>User</th><th>Round</th><th>Score</th><th>Status</th><th>Winner</th><th>Created</th><th>Last activity</th>
                 </tr>
               </thead>
               <tbody>
@@ -344,8 +392,8 @@
                     <td>${s.player_score} – ${s.server_score}</td>
                     <td>
                       ${s.expired ? '<span class="badge expired">Expired</span>' : s.match_complete ? '<span class="badge complete">Complete</span>' : '<span class="badge active">Active</span>'}
-                      ${s.winner ? ' ' + s.winner : ''}
                     </td>
+                    <td>${s.winner || '—'}</td>
                     <td>${fmtTime(s.created_at)}</td>
                     <td>${fmtTime(s.last_activity_at)}</td>
                   </tr>
@@ -363,6 +411,29 @@
     }
 
     $('btn-refresh').addEventListener('click', loadDashboard);
+    $('toggle-expired').addEventListener('change', loadDashboard);
+
+    $('btn-prune').addEventListener('click', async () => {
+      const btn = $('btn-prune');
+      const resultEl = $('prune-result');
+      resultEl.style.display = 'none';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/admin/sessions/prune', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.detail || res.statusText || 'Prune failed');
+        resultEl.className = 'success';
+        resultEl.textContent = 'Pruned ' + (data.pruned_count || 0) + ' expired session(s).';
+        resultEl.style.display = 'block';
+        loadDashboard();
+      } catch (e) {
+        resultEl.textContent = e.message || String(e);
+        resultEl.className = 'error';
+        resultEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     async function loadSettingsForm() {
       $('settings-error').style.display = 'none';
@@ -372,6 +443,7 @@
         $('cfg-max-rounds').value = cfg.max_rounds;
         $('cfg-max-sessions').value = cfg.max_sessions;
         $('cfg-timeout').value = cfg.session_timeout_seconds;
+        $('cfg-retention').value = cfg.retention_seconds != null ? cfg.retention_seconds : 604800;
       } catch (e) {
         $('settings-error').textContent = e.message || String(e);
         $('settings-error').style.display = 'block';
@@ -390,7 +462,8 @@
         const body = {
           max_rounds: parseInt($('cfg-max-rounds').value, 10),
           max_sessions: parseInt($('cfg-max-sessions').value, 10),
-          session_timeout_seconds: parseInt($('cfg-timeout').value, 10)
+          session_timeout_seconds: parseInt($('cfg-timeout').value, 10),
+          retention_seconds: parseInt($('cfg-retention').value, 10)
         };
         const res = await fetch('/admin/cfg', {
           method: 'PUT',

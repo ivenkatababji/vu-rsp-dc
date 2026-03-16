@@ -1,3 +1,4 @@
+import json
 import time
 import uuid
 from pathlib import Path
@@ -21,10 +22,24 @@ admin_router = APIRouter(prefix="/admin", dependencies=[Depends(verify_admin)])
 # Per-session state (from DB): { session_id?, user_id, max_rounds, round_number, ... }
 SessionState = dict
 
+_SERVER_CONFIG_PATH = Path(__file__).parent / "server_config.json"
+
+
+def _load_server_config() -> dict[str, Any]:
+    """Load server config from server_config.json. Missing file or key => defaults."""
+    if not _SERVER_CONFIG_PATH.exists():
+        return {"db_path": ":memory:"}
+    try:
+        data = json.loads(_SERVER_CONFIG_PATH.read_text(encoding="utf-8"))
+        return {"db_path": data.get("db_path") or ":memory:"}
+    except (json.JSONDecodeError, OSError):
+        return {"db_path": ":memory:"}
+
 
 @app.on_event("startup")
 def startup():
-    db.init_db()
+    config = _load_server_config()
+    db.init_db(path=config.get("db_path"))
 
 
 class PlayRequest(BaseModel):
@@ -91,12 +106,22 @@ class ConfigResponse(BaseModel):
     max_rounds: int
     max_sessions: int
     session_timeout_seconds: int
+    retention_seconds: int
 
 
 class ConfigUpdateRequest(BaseModel):
     max_rounds: Optional[int] = None
     max_sessions: Optional[int] = None
     session_timeout_seconds: Optional[int] = None
+    retention_seconds: Optional[int] = None
+
+
+class PruneRequest(BaseModel):
+    retention_seconds: Optional[int] = None
+
+
+class PruneResponse(BaseModel):
+    pruned_count: int
 
 
 def _is_session_expired(state: SessionState) -> bool:
@@ -112,7 +137,6 @@ def _get_session(session_id: str) -> SessionState:
     if state is None:
         raise HTTPException(status_code=404, detail="Session not found")
     if _is_session_expired(state):
-        db.delete_session(session_id)
         raise HTTPException(status_code=404, detail="Session expired")
     state["session_id"] = session_id
     return state
@@ -124,10 +148,9 @@ def create_session(
     body: Optional[CreateSessionRequest] = None,
 ):
     """Create a new game session. Requires game user auth (Basic). Session user_id is set from authenticated username."""
-    db.evict_expired_sessions()
     config = db.get_config()
     max_sessions = config.get("max_sessions") or 0
-    if max_sessions > 0 and db.count_sessions() >= max_sessions:
+    if max_sessions > 0 and db.count_active_sessions() >= max_sessions:
         raise HTTPException(
             status_code=503,
             detail=f"Max sessions limit reached ({max_sessions}). Try again later.",
@@ -257,11 +280,13 @@ def admin_dashboard_redirect():
 # --- Admin: monitoring APIs ---
 
 @admin_router.get("/monitor/sessions", response_model=list[MonitorSessionSummary])
-def admin_list_sessions():
-    """List all sessions (active and expired). Expired sessions are still shown with expired=true until evicted."""
-    db.evict_expired_sessions()
+def admin_list_sessions(include_expired: bool = False):
+    """List sessions. By default only active. Set include_expired=true to also return expired sessions (kept for analysis)."""
     result = []
     for sid, state in db.list_sessions():
+        expired = _is_session_expired(state)
+        if not include_expired and expired:
+            continue
         max_rounds = state.get("max_rounds") or 5
         result.append(
             MonitorSessionSummary(
@@ -275,7 +300,7 @@ def admin_list_sessions():
                 match_complete=state["round_number"] >= max_rounds,
                 created_at=state.get("created_at", 0),
                 last_activity_at=state.get("last_activity_at", 0),
-                expired=_is_session_expired(state),
+                expired=expired,
             )
         )
     return result
@@ -284,7 +309,6 @@ def admin_list_sessions():
 @admin_router.get("/monitor/game_stats", response_model=GameStatsResponse)
 def admin_game_stats():
     """Aggregate game statistics (sessions, matches, rounds, wins)."""
-    db.evict_expired_sessions()
     stats = db.get_game_stats()
     return GameStatsResponse(
         total_sessions_created=stats["total_sessions_created"],
@@ -293,7 +317,7 @@ def admin_game_stats():
         player_wins=stats["player_wins"],
         server_wins=stats["server_wins"],
         draws=stats["draws"],
-        active_sessions=db.count_sessions(),
+        active_sessions=db.count_active_sessions(),
     )
 
 
@@ -307,6 +331,7 @@ def admin_get_config():
         max_rounds=config.get("max_rounds", 5),
         max_sessions=config.get("max_sessions", 0),
         session_timeout_seconds=config.get("session_timeout_seconds", 0),
+        retention_seconds=config.get("retention_seconds", 604800),
     )
 
 
@@ -319,12 +344,22 @@ def admin_update_config(body: ConfigUpdateRequest):
         raise HTTPException(status_code=400, detail="max_sessions cannot be negative")
     if body.session_timeout_seconds is not None and body.session_timeout_seconds < 0:
         raise HTTPException(status_code=400, detail="session_timeout_seconds cannot be negative")
+    if body.retention_seconds is not None and body.retention_seconds < 0:
+        raise HTTPException(status_code=400, detail="retention_seconds cannot be negative")
     db.set_config(
         max_rounds=body.max_rounds,
         max_sessions=body.max_sessions,
         session_timeout_seconds=body.session_timeout_seconds,
+        retention_seconds=body.retention_seconds,
     )
     return admin_get_config()
+
+
+@admin_router.post("/sessions/prune", response_model=PruneResponse)
+def admin_prune_sessions(body: Optional[PruneRequest] = None):
+    """Delete expired sessions older than retention period. Uses config retention_seconds unless overridden in body."""
+    pruned = db.prune_expired_sessions(body.retention_seconds if body else None)
+    return PruneResponse(pruned_count=pruned)
 
 
 app.include_router(admin_router)

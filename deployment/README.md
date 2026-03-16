@@ -29,6 +29,7 @@ replaced with a real image classification model.
         admin_config.json        # Admin credentials (create from .example; do not commit secrets)
         game_auth.py            # Game user auth (pre-provisioned users from config file)
         users_config.json        # Game users username:password (optional; see Game user authentication)
+        server_config.json       # Server config (optional; db_path for SQLite file or :memory:)
         db.py                    # SQLite state (sessions, config, game stats)
         game.py             # Game rules and random server move
         classifier.py       # Stub image classifier
@@ -187,8 +188,9 @@ to create the file.
 
 Sessions, configuration, and game statistics are stored in **SQLite**. By
 default the database is **in-memory** (`:memory:`), so data is lost when the
-server stops. To persist state, set the `DB_PATH` in `server/db.py` to a file
-path (e.g. `"state.db"`).
+server stops. To persist state, create `server/server_config.json` from
+`server/server_config.json.example` and set **`db_path`** to a file path
+(e.g. `"state.db"`). The server reads this file at startup.
 
 ------------------------------------------------------------------------
 

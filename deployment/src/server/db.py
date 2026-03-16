@@ -7,7 +7,7 @@ import sqlite3
 import time
 from typing import Any, Optional
 
-# In-memory by default; use a file path for persistence later.
+# Set by init_db() from server config; default in-memory.
 DB_PATH = ":memory:"
 
 _conn: Optional[sqlite3.Connection] = None
@@ -21,18 +21,29 @@ def get_conn() -> sqlite3.Connection:
     return _conn
 
 
-def init_db() -> None:
-    """Create tables and seed default config and game_stats."""
+def init_db(path: Optional[str] = None) -> None:
+    """Create tables and seed default config and game_stats. path: SQLite DB path (e.g. ':memory:' or 'state.db')."""
+    global DB_PATH
+    if path is not None:
+        DB_PATH = path
     conn = get_conn()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             max_rounds INTEGER NOT NULL DEFAULT 5,
             max_sessions INTEGER NOT NULL DEFAULT 10,
-            session_timeout_seconds INTEGER NOT NULL DEFAULT 0
+            session_timeout_seconds INTEGER NOT NULL DEFAULT 0,
+            retention_seconds INTEGER NOT NULL DEFAULT 604800
         );
-        INSERT OR IGNORE INTO config (id, max_rounds, max_sessions, session_timeout_seconds)
-        VALUES (1, 5, 10, 0);
+        INSERT OR IGNORE INTO config (id, max_rounds, max_sessions, session_timeout_seconds, retention_seconds)
+        VALUES (1, 5, 10, 0, 604800);
+    """)
+    try:
+        conn.execute("ALTER TABLE config ADD COLUMN retention_seconds INTEGER NOT NULL DEFAULT 604800")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+    conn.executescript("""
 
         CREATE TABLE IF NOT EXISTS game_stats (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -63,19 +74,34 @@ def init_db() -> None:
 
 def get_config() -> dict[str, Any]:
     conn = get_conn()
-    row = conn.execute(
-        "SELECT max_rounds, max_sessions, session_timeout_seconds FROM config WHERE id = 1"
-    ).fetchone()
+    try:
+        row = conn.execute(
+            "SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds FROM config WHERE id = 1"
+        ).fetchone()
+    except sqlite3.OperationalError:
+        row = conn.execute(
+            "SELECT max_rounds, max_sessions, session_timeout_seconds FROM config WHERE id = 1"
+        ).fetchone()
     if not row:
-        return {"max_rounds": 5, "max_sessions": 10, "session_timeout_seconds": 0}
-    return {
+        return {"max_rounds": 5, "max_sessions": 10, "session_timeout_seconds": 0, "retention_seconds": 604800}
+    out = {
         "max_rounds": row["max_rounds"],
         "max_sessions": row["max_sessions"],
         "session_timeout_seconds": row["session_timeout_seconds"],
     }
+    try:
+        out["retention_seconds"] = row["retention_seconds"]
+    except (KeyError, IndexError):
+        out["retention_seconds"] = 604800
+    return out
 
 
-def set_config(max_rounds: Optional[int] = None, max_sessions: Optional[int] = None, session_timeout_seconds: Optional[int] = None) -> None:
+def set_config(
+    max_rounds: Optional[int] = None,
+    max_sessions: Optional[int] = None,
+    session_timeout_seconds: Optional[int] = None,
+    retention_seconds: Optional[int] = None,
+) -> None:
     conn = get_conn()
     updates = []
     params = []
@@ -88,6 +114,9 @@ def set_config(max_rounds: Optional[int] = None, max_sessions: Optional[int] = N
     if session_timeout_seconds is not None:
         updates.append("session_timeout_seconds = ?")
         params.append(session_timeout_seconds)
+    if retention_seconds is not None:
+        updates.append("retention_seconds = ?")
+        params.append(retention_seconds)
     if updates:
         params.append(1)
         conn.execute(f"UPDATE config SET {', '.join(updates)} WHERE id = ?", params)
@@ -193,6 +222,24 @@ def count_sessions() -> int:
     return row["n"] if row else 0
 
 
+def count_active_sessions() -> int:
+    """Count sessions that are not yet expired (within effective timeout)."""
+    timeout = get_effective_session_timeout_seconds()
+    if timeout <= 0:
+        return count_sessions()
+    now = time.time()
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT session_id, last_activity_at, created_at FROM sessions"
+    ).fetchall()
+    n = 0
+    for row in rows:
+        last = row["last_activity_at"] or row["created_at"] or 0
+        if (now - last) <= timeout:
+            n += 1
+    return n
+
+
 def get_effective_session_timeout_seconds() -> int:
     """Session expiry in seconds. When config.session_timeout_seconds is 0, returns 30 * max_rounds."""
     cfg = get_config()
@@ -203,20 +250,27 @@ def get_effective_session_timeout_seconds() -> int:
 
 
 def evict_expired_sessions() -> None:
-    """Delete sessions that have exceeded the effective session timeout (30 * max_rounds when config is 0)."""
+    """No-op: expired sessions are kept for analysis. Use prune_expired_sessions() to delete by retention."""
+
+
+def prune_expired_sessions(retention_seconds: Optional[int] = None) -> int:
+    """Delete sessions that expired more than retention_seconds ago. Returns number pruned."""
+    cfg = get_config()
+    retention = retention_seconds if retention_seconds is not None else (cfg.get("retention_seconds") or 604800)
     timeout = get_effective_session_timeout_seconds()
-    if timeout <= 0:
-        return
-    now = time.time()
+    cutoff = time.time() - timeout - retention
     conn = get_conn()
     rows = conn.execute(
         "SELECT session_id, last_activity_at, created_at FROM sessions"
     ).fetchall()
+    deleted = 0
     for row in rows:
         last = row["last_activity_at"] or row["created_at"] or 0
-        if (now - last) > timeout:
+        if last < cutoff:
             conn.execute("DELETE FROM sessions WHERE session_id = ?", (row["session_id"],))
+            deleted += 1
     conn.commit()
+    return deleted
 
 
 def get_game_stats() -> dict[str, int]:
