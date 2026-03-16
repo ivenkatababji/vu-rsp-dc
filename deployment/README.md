@@ -24,10 +24,12 @@ replaced with a real image classification model.
     README.md
 
     server/
-        main.py          # FastAPI server
-        db.py            # SQLite state (sessions, config, game stats)
-        game.py          # Game rules and random server move
-        classifier.py    # Stub image classifier
+        main.py              # FastAPI server
+        admin_auth.py        # Admin HTTP Basic Auth (credentials from config file)
+        admin_config.json    # Admin credentials (create from .example; do not commit secrets)
+        db.py               # SQLite state (sessions, config, game stats)
+        game.py             # Game rules and random server move
+        classifier.py       # Stub image classifier
 
     client/
         client.py        # Simple CLI client
@@ -127,6 +129,27 @@ After five rounds:
     Player Score: 3
     Server Score: 2
     Winner: player
+
+------------------------------------------------------------------------
+
+## Admin console and APIs
+
+The admin UI (`/admin`) and all admin APIs (`/admin/cfg`, `/admin/monitor/*`) are
+protected with **HTTP Basic Auth**. Credentials are read from a config file.
+
+1. Copy the example config and set a password:
+   ``` bash
+   cd server
+   cp admin_config.json.example admin_config.json
+   # Edit admin_config.json: set admin_username and admin_password
+   ```
+2. Open `http://localhost:9000/admin` in a browser. When prompted, enter the
+   username and password from `admin_config.json`.
+3. Keep `admin_config.json` out of version control (e.g. add it to `.gitignore`)
+   so production credentials are not committed.
+
+If `admin_config.json` is missing, admin routes return **503** with instructions
+to create the file.
 
 ------------------------------------------------------------------------
 

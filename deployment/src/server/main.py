@@ -3,15 +3,19 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
+from admin_auth import verify_admin
 from classifier import classify_image
 from game import random_move, decide_winner
 import db
 
 app = FastAPI(title="Rock Paper Scissors ML Experiment")
+
+# Admin routes: protected by HTTP Basic Auth (credentials in admin_config.json)
+admin_router = APIRouter(prefix="/admin", dependencies=[Depends(verify_admin)])
 
 # Per-session state (from DB): { session_id?, user_id, max_rounds, round_number, ... }
 SessionState = dict
@@ -236,13 +240,13 @@ def play(req: PlayRequest):
 _ADMIN_HTML_PATH = Path(__file__).parent / "admin.html"
 
 
-@app.get("/admin", response_class=HTMLResponse)
+@admin_router.get("", response_class=HTMLResponse)
 def admin_app():
     """Serve the admin SPA (Dashboard, Settings, etc.)."""
     return HTMLResponse(content=_ADMIN_HTML_PATH.read_text(encoding="utf-8"))
 
 
-@app.get("/admin/dashboard", response_class=RedirectResponse)
+@admin_router.get("/dashboard", response_class=RedirectResponse)
 def admin_dashboard_redirect():
     """Redirect to admin SPA dashboard view."""
     return RedirectResponse(url="/admin#dashboard", status_code=302)
@@ -250,7 +254,7 @@ def admin_dashboard_redirect():
 
 # --- Admin: monitoring APIs ---
 
-@app.get("/admin/monitor/sessions", response_model=list[MonitorSessionSummary])
+@admin_router.get("/monitor/sessions", response_model=list[MonitorSessionSummary])
 def admin_list_sessions():
     """List all sessions (active and expired). Expired sessions are still shown with expired=true until evicted."""
     db.evict_expired_sessions()
@@ -275,7 +279,7 @@ def admin_list_sessions():
     return result
 
 
-@app.get("/admin/monitor/game_stats", response_model=GameStatsResponse)
+@admin_router.get("/monitor/game_stats", response_model=GameStatsResponse)
 def admin_game_stats():
     """Aggregate game statistics (sessions, matches, rounds, wins)."""
     db.evict_expired_sessions()
@@ -293,7 +297,7 @@ def admin_game_stats():
 
 # --- Admin: configuration APIs ---
 
-@app.get("/admin/cfg", response_model=ConfigResponse)
+@admin_router.get("/cfg", response_model=ConfigResponse)
 def admin_get_config():
     """Return current server configuration."""
     config = db.get_config()
@@ -304,7 +308,7 @@ def admin_get_config():
     )
 
 
-@app.put("/admin/cfg", response_model=ConfigResponse)
+@admin_router.put("/cfg", response_model=ConfigResponse)
 def admin_update_config(body: ConfigUpdateRequest):
     """Update configuration. Only provided fields are changed. 0 = unlimited for max_sessions, no timeout for session_timeout_seconds."""
     if body.max_rounds is not None and body.max_rounds < 1:
@@ -319,3 +323,6 @@ def admin_update_config(body: ConfigUpdateRequest):
         session_timeout_seconds=body.session_timeout_seconds,
     )
     return admin_get_config()
+
+
+app.include_router(admin_router)
