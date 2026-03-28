@@ -23,7 +23,7 @@ replaced with a real image classification model.
     requirements.txt
     README.md
 
-    server/
+    src/server/
         main.py                  # FastAPI server
         admin_auth.py            # Admin HTTP Basic Auth (credentials from config file)
         admin_config.json        # Admin credentials (create from .example; do not commit secrets)
@@ -33,11 +33,12 @@ replaced with a real image classification model.
         db.py                    # SQLite state (sessions, config, game stats)
         game.py             # Game rules and random server move
         classifier.py       # Stub image classifier
+        game.html           # Web game SPA at /game
 
-    client/
+    src/client/
         client.py        # Simple CLI client
 
-    simulator/
+    src/simulator/
         simulator.py              # Simulator (many games; client loops POST /play)
         simulator_config.json     # Optional: base_url + users list
 
@@ -58,7 +59,7 @@ pip install -r requirements.txt
 Start the FastAPI server:
 
 ``` bash
-cd server
+cd src/server
 uvicorn main:app --reload
 ```
 
@@ -69,6 +70,16 @@ The server will run at:
 Interactive API documentation is available at:
 
     http://localhost:8000/docs
+
+------------------------------------------------------------------------
+
+## Web game (browser)
+
+Open **`/game`** (e.g. `http://localhost:9000/game` if you use port 9000) for a single-page
+client: sign in with a game username/password, then use a **2×2** tile grid
+(Rock, Paper, Scissors, None). Each round shows who won; after the last round a
+match summary appears with **Play again**. Styling uses the same host as the API
+(no CORS issues).
 
 ------------------------------------------------------------------------
 

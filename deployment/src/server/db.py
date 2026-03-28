@@ -311,6 +311,43 @@ def get_game_stats() -> dict[str, int]:
         return dict(row)
 
 
+def get_user_stats(user_id: str) -> dict[str, int]:
+    """Aggregate stats for one game user from retained sessions rows."""
+    with _lock:
+        conn = get_conn()
+        row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS sessions_started,
+              COALESCE(SUM(CASE WHEN winner IS NOT NULL THEN 1 ELSE 0 END), 0) AS matches_completed,
+              COALESCE(SUM(CASE WHEN winner = 'player' THEN 1 ELSE 0 END), 0) AS matches_won,
+              COALESCE(SUM(CASE WHEN winner = 'server' THEN 1 ELSE 0 END), 0) AS matches_lost,
+              COALESCE(SUM(CASE WHEN winner = 'draw' THEN 1 ELSE 0 END), 0) AS matches_draw,
+              COALESCE(SUM(CASE WHEN winner IS NOT NULL THEN round_number ELSE 0 END), 0) AS rounds_played
+            FROM sessions
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+    if not row:
+        return {
+            "sessions_started": 0,
+            "matches_completed": 0,
+            "matches_won": 0,
+            "matches_lost": 0,
+            "matches_draw": 0,
+            "rounds_played": 0,
+        }
+    return {
+        "sessions_started": int(row["sessions_started"] or 0),
+        "matches_completed": int(row["matches_completed"] or 0),
+        "matches_won": int(row["matches_won"] or 0),
+        "matches_lost": int(row["matches_lost"] or 0),
+        "matches_draw": int(row["matches_draw"] or 0),
+        "rounds_played": int(row["rounds_played"] or 0),
+    }
+
+
 def get_win_breakdown_since(since_timestamp: float) -> dict[str, int]:
     """Count completed matches by winner since since_timestamp (Unix epoch)."""
     with _lock:

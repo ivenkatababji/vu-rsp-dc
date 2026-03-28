@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from admin_auth import verify_admin
@@ -47,6 +47,17 @@ class PlayRequest(BaseModel):
     image: str
 
 
+class PlayRoundResponse(BaseModel):
+    match_complete: bool
+    round: int
+    player_move: str
+    server_move: str
+    round_winner: str
+    player_score: int
+    server_score: int
+    winner: Optional[str] = None
+
+
 class CreateSessionRequest(BaseModel):
     user_id: Optional[str] = None
 
@@ -75,6 +86,15 @@ class SessionStatus(BaseModel):
     round_history: list[RoundResult]
     match_complete: bool
     winner: Optional[str] = None
+
+
+class UserStatsResponse(BaseModel):
+    sessions_started: int
+    matches_completed: int
+    matches_won: int
+    matches_lost: int
+    matches_draw: int
+    rounds_played: int
 
 
 # --- Admin: monitoring & config models ---
@@ -147,6 +167,20 @@ def _get_session(session_id: str) -> SessionState:
         raise HTTPException(status_code=404, detail="Session expired")
     state["session_id"] = session_id
     return state
+
+
+@app.get("/me/stats", response_model=UserStatsResponse)
+def get_my_stats(username: str = Depends(verify_game_user)):
+    """Career-style stats for the authenticated game user (from sessions still in the database)."""
+    s = db.get_user_stats(username)
+    return UserStatsResponse(
+        sessions_started=s["sessions_started"],
+        matches_completed=s["matches_completed"],
+        matches_won=s["matches_won"],
+        matches_lost=s["matches_lost"],
+        matches_draw=s["matches_draw"],
+        rounds_played=s["rounds_played"],
+    )
 
 
 @app.post("/sessions", response_model=SessionResponse)
@@ -265,7 +299,7 @@ def _run_one_play_round(session_id: str, image: str) -> Optional[dict[str, Any]]
     }
 
 
-@app.post("/play")
+@app.post("/play", response_model=PlayRoundResponse)
 def play(req: PlayRequest, _username: str = Depends(verify_game_user)):
     """Play one round in the given session. Requires game user auth."""
     out = _run_one_play_round(req.session_id, req.image)
@@ -274,7 +308,7 @@ def play(req: PlayRequest, _username: str = Depends(verify_game_user)):
             status_code=400,
             detail="Match already complete. Create a new session to play again.",
         )
-    return out
+    return PlayRoundResponse(**out)
 
 
 # --- Admin: SPA (dashboard + settings) ---
@@ -393,3 +427,21 @@ def admin_prune_sessions(body: Optional[PruneRequest] = None):
 
 
 app.include_router(admin_router)
+
+# --- Web game client (SPA): registered after /admin so paths stay predictable.
+# /admin/game is a public alias for setups where the proxy routes /admin/* (and /docs) but not /game.
+
+_GAME_HTML_PATH = Path(__file__).parent / "game.html"
+
+
+@app.get("/game", response_class=HTMLResponse)
+@app.get("/admin/game", response_class=HTMLResponse, include_in_schema=False)
+def game_spa_get():
+    """Rock Paper Scissors web client: login and play with rock/paper/scissors/none tiles."""
+    return HTMLResponse(content=_GAME_HTML_PATH.read_text(encoding="utf-8"))
+
+
+@app.head("/game")
+@app.head("/admin/game", include_in_schema=False)
+def game_spa_head():
+    return Response(status_code=200, media_type="text/html")
