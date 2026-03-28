@@ -398,10 +398,11 @@
       letter-spacing: 0.04em;
     }
 
-    .tile-rock { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 2px 0 0 rgba(94, 228, 163, 0.55); }
-    .tile-paper { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 2px 0 0 rgba(124, 92, 255, 0.55); }
-    .tile-scissors { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 2px 0 0 rgba(255, 138, 122, 0.55); }
-    .tile-none { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 2px 0 0 rgba(196, 181, 253, 0.55); }
+    /* Must be .tile.* so reused move classes on non-buttons do not inherit button chrome */
+    .tile.tile-rock { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 2px 0 0 rgba(94, 228, 163, 0.55); }
+    .tile.tile-paper { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 2px 0 0 rgba(124, 92, 255, 0.55); }
+    .tile.tile-scissors { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 2px 0 0 rgba(255, 138, 122, 0.55); }
+    .tile.tile-none { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 2px 0 0 rgba(196, 181, 253, 0.55); }
 
     .round-result {
       min-height: 4.75rem;
@@ -541,30 +542,91 @@
       padding-top: 0.3rem;
     }
 
-    .match-history-dock .vision-gallery-title {
-      font-size: 0.55rem;
-      margin-bottom: 0.2rem;
-      text-align: left;
-      padding-left: 0.1rem;
-    }
-
-    .match-history-dock .vision-gallery-item img,
     .match-history-dock .text-gallery-emoji {
-      width: 2.65rem;
-      height: 2.65rem;
-      font-size: 1.45rem;
+      filter: none;
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border);
     }
 
-    .match-history-dock .vision-gallery-cap,
-    .match-history-dock .text-gallery-cap {
-      font-size: 0.52rem;
-      max-width: 3.5rem;
+    /* Bottom row: classified | house (smaller) */
+    .match-history-dock .text-gallery-duel-row .text-gallery-emoji {
+      width: 1.62rem;
+      height: 1.62rem;
+      font-size: 0.88rem;
+      border-radius: 5px;
     }
 
-    .match-history-dock .you-play-line,
-    .match-history-dock .house-play-line {
-      font-size: 0.52rem;
-      margin-top: 0.1rem;
+    /* Top: text button icon or vision input frame */
+    .match-history-dock .text-gallery-input-slot .text-gallery-input-emoji {
+      width: 2rem;
+      height: 2rem;
+      font-size: 0.98rem;
+      border-radius: 6px;
+    }
+
+    .match-history-dock .text-gallery-input-img {
+      display: block;
+      width: 2rem;
+      height: 2rem;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.35);
+    }
+
+    .match-history-dock .text-gallery-item {
+      flex-direction: column;
+      align-items: center;
+      gap: 0.12rem;
+      max-width: 6.25rem;
+    }
+
+    .match-history-dock .text-gallery-divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 5.75rem;
+      margin: 0;
+      gap: 0;
+    }
+
+    .match-history-dock .text-gallery-divider-arm {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.16);
+    }
+
+    .match-history-dock .text-gallery-divider-node {
+      flex: 0 0 auto;
+      padding: 0 0.2rem;
+      font-size: 0.5rem;
+      font-weight: 600;
+      color: var(--muted);
+      line-height: 1;
+      opacity: 0.75;
+    }
+
+    .match-history-dock .text-gallery-duel-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 0.18rem;
+      width: 100%;
+      max-width: 5.75rem;
+    }
+
+    .match-history-dock .text-gallery-vs {
+      font-size: 0.55rem;
+      opacity: 0.45;
+      font-weight: 500;
+    }
+
+    .match-history-dock .text-gallery-duel-row .text-gallery-emoji.text-gallery-emoji-pending {
+      font-size: 0.65rem;
     }
 
     .vision-match-gallery {
@@ -578,51 +640,11 @@
       display: none !important;
     }
 
-    .vision-gallery-title {
-      font-size: 0.62rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: var(--muted);
-      margin-bottom: 0.45rem;
-      text-align: center;
-    }
-
     .vision-gallery-strip {
       display: flex;
       flex-wrap: wrap;
       gap: 0.45rem;
       justify-content: center;
-    }
-
-    .vision-gallery-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.3rem;
-      max-width: 5.5rem;
-    }
-
-    .vision-gallery-item img {
-      width: 4.5rem;
-      height: 4.5rem;
-      object-fit: cover;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: rgba(0, 0, 0, 0.35);
-    }
-
-    .vision-gallery-cap {
-      font-size: 0.68rem;
-      color: var(--muted);
-      text-align: center;
-      line-height: 1.25;
-      word-break: break-word;
-    }
-
-    .vision-gallery-cap strong {
-      color: var(--text);
-      font-weight: 600;
     }
 
     .text-match-gallery {
@@ -636,12 +658,74 @@
       display: none !important;
     }
 
+    .text-match-gallery .vision-gallery-strip,
+    .vision-match-gallery .vision-gallery-strip {
+      gap: 0.32rem;
+      row-gap: 0.28rem;
+    }
+
+    .text-gallery-input-slot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 0;
+    }
+
     .text-gallery-item {
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: flex-start;
+      gap: 0.2rem;
+    }
+
+    .text-gallery-input-img {
+      display: block;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.35);
+    }
+
+    .text-gallery-divider {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      max-width: 7.5rem;
+    }
+
+    .text-gallery-divider-arm {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .text-gallery-divider-node {
+      flex: 0 0 auto;
+      padding: 0 0.25rem;
+      font-size: 0.55rem;
+      font-weight: 600;
+      color: var(--muted);
+      line-height: 1;
+    }
+
+    .text-gallery-duel-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
       gap: 0.3rem;
-      max-width: 5.5rem;
+    }
+
+    .text-gallery-vs {
+      flex: 0 0 auto;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      line-height: 1;
+      opacity: 0.55;
+      user-select: none;
     }
 
     .text-gallery-emoji {
@@ -658,21 +742,9 @@
       filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
     }
 
-    .text-gallery-item.tile-rock .text-gallery-emoji { border-color: rgba(94, 228, 163, 0.45); }
-    .text-gallery-item.tile-paper .text-gallery-emoji { border-color: rgba(124, 92, 255, 0.5); }
-    .text-gallery-item.tile-scissors .text-gallery-emoji { border-color: rgba(255, 138, 122, 0.5); }
-    .text-gallery-item.tile-none .text-gallery-emoji { border-color: rgba(196, 181, 253, 0.45); }
-
-    .text-gallery-cap {
-      font-size: 0.68rem;
+    .text-gallery-emoji.text-gallery-emoji-pending {
+      font-size: 1.1rem;
       color: var(--muted);
-      text-align: center;
-      line-height: 1.25;
-      word-break: break-word;
-    }
-
-    .text-gallery-cap strong {
-      color: var(--text);
       font-weight: 600;
     }
 
@@ -899,17 +971,37 @@
         padding: 0.28rem 0.32rem 0.32rem;
       }
 
-      .match-history-dock .vision-gallery-item img,
-      .match-history-dock .text-gallery-emoji {
-        width: 2.35rem;
-        height: 2.35rem;
-        font-size: 1.25rem;
+      .match-history-dock .text-gallery-duel-row .text-gallery-emoji {
+        width: 1.42rem;
+        height: 1.42rem;
+        font-size: 0.78rem;
+        border-radius: 4px;
       }
 
-      .match-history-dock .vision-gallery-cap,
-      .match-history-dock .text-gallery-cap {
-        font-size: 0.48rem;
-        max-width: 3.1rem;
+      .match-history-dock .text-gallery-input-slot .text-gallery-input-emoji {
+        width: 1.75rem;
+        height: 1.75rem;
+        font-size: 0.85rem;
+        border-radius: 5px;
+      }
+
+      .match-history-dock .text-gallery-input-img {
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 5px;
+      }
+
+      .match-history-dock .text-gallery-item {
+        max-width: 5.5rem;
+      }
+
+      .match-history-dock .text-gallery-divider,
+      .match-history-dock .text-gallery-duel-row {
+        max-width: 5.1rem;
+      }
+
+      .match-history-dock .text-gallery-duel-row .text-gallery-emoji.text-gallery-emoji-pending {
+        font-size: 0.55rem;
       }
 
       .btn-ghost {
@@ -1341,15 +1433,15 @@
     }
 
     const TEXT_MOVE_UI = {
-      rock: { emoji: '🪨', label: 'Rock', tileClass: 'tile-rock' },
-      paper: { emoji: '📄', label: 'Paper', tileClass: 'tile-paper' },
-      scissors: { emoji: '✂️', label: 'Scissors', tileClass: 'tile-scissors' },
-      none: { emoji: '✨', label: 'None', tileClass: 'tile-none' },
+      rock: { emoji: '🪨', label: 'Rock' },
+      paper: { emoji: '📄', label: 'Paper' },
+      scissors: { emoji: '✂️', label: 'Scissors' },
+      none: { emoji: '✨', label: 'None' },
     };
 
     function textMoveUi(move) {
       const m = String(move || '').toLowerCase();
-      return TEXT_MOVE_UI[m] || { emoji: '❔', label: String(move || '?'), tileClass: '' };
+      return TEXT_MOVE_UI[m] || { emoji: '❔', label: String(move || '?') };
     }
 
     function syncMatchHistoryDockVisibility() {
@@ -1399,18 +1491,21 @@
       return Number.isFinite(n) ? n : 0;
     }
 
-    function houseLineHtml(serverMove, pending) {
-      if (pending) {
-        return '<span class="house-play-line"><span class="house-play-pending">House · …</span></span>';
-      }
-      const hu = textMoveUi(serverMove);
-      return (
-        '<span class="house-play-line">House · <span aria-hidden="true">' +
-        hu.emoji +
-        '</span> <span class="hi">' +
-        escapeHtmlVision(hu.label) +
-        '</span></span>'
-      );
+    function matchHistoryDividerEl() {
+      const divider = document.createElement('div');
+      divider.className = 'text-gallery-divider';
+      divider.setAttribute('aria-hidden', 'true');
+      const divArmL = document.createElement('span');
+      divArmL.className = 'text-gallery-divider-arm';
+      const divNode = document.createElement('span');
+      divNode.className = 'text-gallery-divider-node';
+      divNode.textContent = '+';
+      const divArmR = document.createElement('span');
+      divArmR.className = 'text-gallery-divider-arm';
+      divider.appendChild(divArmL);
+      divider.appendChild(divNode);
+      divider.appendChild(divArmR);
+      return divider;
     }
 
     function appendTileOrVoiceHistory(data, viaAudio) {
@@ -1443,36 +1538,56 @@
         return;
       }
       host.hidden = false;
-      const title = document.createElement('p');
-      title.className = 'vision-gallery-title';
-      title.textContent = 'Text & voice plays this match';
       const strip = document.createElement('div');
       strip.className = 'vision-gallery-strip';
       for (let i = 0; i < state.textGestureGallery.length; i++) {
         const item = state.textGestureGallery[i];
-        const ui = textMoveUi(item.move);
+        const uiYou = textMoveUi(item.move);
+        const houseStr = item.houseMove != null ? String(item.houseMove) : '';
+        const hasHouse = houseStr !== '';
+        const uiHouse = hasHouse ? textMoveUi(houseStr) : null;
         const wrap = document.createElement('div');
-        wrap.className = 'text-gallery-item' + (ui.tileClass ? ' ' + ui.tileClass : '');
-        const em = document.createElement('div');
-        em.className = 'text-gallery-emoji';
-        em.setAttribute('aria-hidden', 'true');
-        em.textContent = ui.emoji;
-        const cap = document.createElement('span');
-        cap.className = 'text-gallery-cap';
-        const mic = item.viaAudio ? '<span aria-hidden="true">🎤</span> ' : '';
-        cap.innerHTML =
-          'Round <strong>' + item.round + '</strong><br>' +
-          '<span class="you-play-line">' +
-          mic +
-          'You · <span class="hi">' +
-          escapeHtmlVision(ui.label) +
-          '</span></span>' +
-          houseLineHtml(item.houseMove, false);
-        wrap.appendChild(em);
-        wrap.appendChild(cap);
+        wrap.className = 'text-gallery-item';
+        wrap.setAttribute('role', 'group');
+        const rn = item.round;
+        const via = item.viaAudio ? 'Voice input. ' : '';
+        const roundLead = rn ? 'Round ' + rn + '. ' : '';
+        wrap.setAttribute(
+          'aria-label',
+          via + roundLead + 'You ' + uiYou.label + ', house ' + (uiHouse ? uiHouse.label : 'pending')
+        );
+        const inputSlot = document.createElement('div');
+        inputSlot.className = 'text-gallery-input-slot';
+        const inputEm = document.createElement('div');
+        inputEm.className = 'text-gallery-emoji text-gallery-input-emoji';
+        inputEm.setAttribute('aria-hidden', 'true');
+        inputEm.textContent = uiYou.emoji;
+        inputSlot.appendChild(inputEm);
+        const divider = matchHistoryDividerEl();
+        const row = document.createElement('div');
+        row.className = 'text-gallery-duel-row';
+        const emClassified = document.createElement('div');
+        emClassified.className = 'text-gallery-emoji';
+        emClassified.setAttribute('aria-hidden', 'true');
+        emClassified.textContent = uiYou.emoji;
+        const vs = document.createElement('span');
+        vs.className = 'text-gallery-vs';
+        vs.setAttribute('aria-hidden', 'true');
+        vs.textContent = '|';
+        const emHouse = document.createElement('div');
+        emHouse.className =
+          'text-gallery-emoji' + (hasHouse ? '' : ' text-gallery-emoji-pending');
+        emHouse.setAttribute('aria-hidden', 'true');
+        emHouse.textContent = hasHouse ? uiHouse.emoji : '…';
+        row.appendChild(emClassified);
+        row.appendChild(vs);
+        row.appendChild(emHouse);
+        wrap.appendChild(inputSlot);
+        wrap.appendChild(divider);
+        wrap.appendChild(row);
         strip.appendChild(wrap);
       }
-      host.replaceChildren(title, strip);
+      host.replaceChildren(strip);
       syncMatchHistoryDockVisibility();
     }
 
@@ -1486,37 +1601,59 @@
         return;
       }
       host.hidden = false;
-      const title = document.createElement('p');
-      title.className = 'vision-gallery-title';
-      title.textContent = 'Vision plays this match';
       const strip = document.createElement('div');
       strip.className = 'vision-gallery-strip';
       for (let i = 0; i < state.visionGallery.length; i++) {
         const item = state.visionGallery[i];
+        const uiClassified = textMoveUi(item.label);
+        const houseStr = item.houseMove != null ? String(item.houseMove) : '';
+        const hasHouse = houseStr !== '';
+        const uiHouse = hasHouse ? textMoveUi(houseStr) : null;
         const wrap = document.createElement('div');
-        wrap.className = 'vision-gallery-item';
-        const img = document.createElement('img');
-        img.src = item.thumb;
-        const hasHouse = item.houseMove != null && item.houseMove !== '';
-        img.alt =
-          'Round ' +
-          item.round +
-          ', you ' +
-          item.label +
-          (hasHouse ? ', house ' + item.houseMove : '');
-        const cap = document.createElement('span');
-        cap.className = 'vision-gallery-cap';
-        cap.innerHTML =
-          'Round <strong>' + item.round + '</strong><br>' +
-          '<span class="you-play-line">You · <span class="hi">' +
-          escapeHtmlVision(item.label) +
-          '</span></span>' +
-          houseLineHtml(item.houseMove, !hasHouse);
-        wrap.appendChild(img);
-        wrap.appendChild(cap);
+        wrap.className = 'text-gallery-item';
+        wrap.setAttribute('role', 'group');
+        const rn = item.round;
+        const roundLead = rn ? 'Round ' + rn + '. ' : '';
+        wrap.setAttribute(
+          'aria-label',
+          roundLead +
+            'Input image. Classified ' +
+            uiClassified.label +
+            '. House ' +
+            (uiHouse ? uiHouse.label : 'pending')
+        );
+        const inputSlot = document.createElement('div');
+        inputSlot.className = 'text-gallery-input-slot';
+        const inputImg = document.createElement('img');
+        inputImg.className = 'text-gallery-input-img';
+        inputImg.src = item.thumb;
+        inputImg.alt = (rn ? 'Your input, round ' + rn : 'Your input') + ', classified ' + uiClassified.label;
+        inputSlot.appendChild(inputImg);
+        const divider = matchHistoryDividerEl();
+        const row = document.createElement('div');
+        row.className = 'text-gallery-duel-row';
+        const emClassified = document.createElement('div');
+        emClassified.className = 'text-gallery-emoji';
+        emClassified.setAttribute('aria-hidden', 'true');
+        emClassified.textContent = uiClassified.emoji;
+        const vs = document.createElement('span');
+        vs.className = 'text-gallery-vs';
+        vs.setAttribute('aria-hidden', 'true');
+        vs.textContent = '|';
+        const emHouse = document.createElement('div');
+        emHouse.className =
+          'text-gallery-emoji' + (hasHouse ? '' : ' text-gallery-emoji-pending');
+        emHouse.setAttribute('aria-hidden', 'true');
+        emHouse.textContent = hasHouse ? uiHouse.emoji : '…';
+        row.appendChild(emClassified);
+        row.appendChild(vs);
+        row.appendChild(emHouse);
+        wrap.appendChild(inputSlot);
+        wrap.appendChild(divider);
+        wrap.appendChild(row);
         strip.appendChild(wrap);
       }
-      host.replaceChildren(title, strip);
+      host.replaceChildren(strip);
       syncMatchHistoryDockVisibility();
     }
 
