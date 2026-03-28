@@ -416,6 +416,47 @@
       overscroll-behavior: contain;
     }
 
+    /* Stable arena layout after input mode is known (no vertical jump from new plays / panels) */
+    #view-game .panel.game-layout-locked .round-result {
+      height: 7.5rem;
+      min-height: 7.5rem;
+      max-height: 7.5rem;
+      flex-shrink: 0;
+    }
+
+    #view-game .panel.game-layout-locked .input-slot {
+      min-height: 12rem;
+    }
+
+    #view-game .panel.game-layout-locked.game-single-mode .input-slot {
+      min-height: 9rem;
+    }
+
+    #view-game .panel.game-layout-locked .match-history-dock {
+      height: 5.85rem;
+      min-height: 5.85rem;
+      max-height: 5.85rem;
+      flex-shrink: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+
+    .match-history-placeholder {
+      font-size: 0.62rem;
+      color: var(--muted);
+      text-align: center;
+      margin: 0;
+      padding: 0.65rem 0.5rem;
+      line-height: 1.4;
+    }
+
+    .match-history-placeholder[hidden] {
+      display: none !important;
+    }
+
     .round-result.player-win { border-color: rgba(94, 228, 163, 0.5); background: rgba(94, 228, 163, 0.08); }
     .round-result.server-win { border-color: rgba(255, 138, 122, 0.45); background: rgba(255, 138, 122, 0.08); }
     .round-result.draw { border-color: rgba(196, 181, 253, 0.45); background: rgba(196, 181, 253, 0.06); }
@@ -471,7 +512,6 @@
 
     /* Fixed-height play history: scroll inside, no page growth as rounds accrue */
     .match-history-dock {
-      flex-shrink: 0;
       border-radius: 12px;
       border: 1px solid var(--border);
       background: rgba(0, 0, 0, 0.16);
@@ -833,6 +873,26 @@
         word-break: break-word;
       }
 
+      #view-game .panel.game-layout-locked .round-result {
+        height: 6.5rem;
+        min-height: 6.5rem;
+        max-height: 6.5rem;
+      }
+
+      #view-game .panel.game-layout-locked .match-history-dock {
+        height: 5rem;
+        min-height: 5rem;
+        max-height: 5rem;
+      }
+
+      #view-game .panel.game-layout-locked .input-slot {
+        min-height: 10.25rem;
+      }
+
+      #view-game .panel.game-layout-locked.game-single-mode .input-slot {
+        min-height: 7.75rem;
+      }
+
       .match-history-dock {
         padding: 0.28rem 0.32rem 0.32rem;
       }
@@ -1011,6 +1071,7 @@
 
         <div id="game-input-section" class="game-input-section" style="display: none;" aria-label="Choose how to play your move">
           <div id="input-mode-switcher" class="input-mode-switcher" role="tablist" aria-label="Input mode" hidden></div>
+          <div class="input-slot">
           <div id="panel-buttons" class="input-panel" role="tabpanel" aria-label="Text: rock, paper, scissors, none">
             <div class="tiles">
               <button type="button" class="tile tile-rock" data-move="rock" aria-label="Rock">
@@ -1045,6 +1106,7 @@
             </div>
             <p class="input-panel-hint" id="audio-panel-hint"></p>
           </div>
+          </div>
         </div>
 
         <div class="round-result-block" id="round-result-block">
@@ -1052,6 +1114,7 @@
             <span class="muted-hint">Pick a move to begin.</span>
           </div>
           <div id="match-history-dock" class="match-history-dock" hidden>
+            <p id="match-history-placeholder" class="match-history-placeholder" hidden>Your plays for this match will appear here.</p>
             <div id="text-match-gallery" class="text-match-gallery" hidden></div>
             <div id="vision-match-gallery" class="vision-match-gallery" hidden></div>
           </div>
@@ -1289,10 +1352,44 @@
 
     function syncMatchHistoryDockVisibility() {
       const dock = $('match-history-dock');
+      const ph = $('match-history-placeholder');
       if (!dock) return;
+      const panel = document.querySelector('#view-game .panel');
+      const locked = panel && panel.classList.contains('game-layout-locked');
       const has = state.textGestureGallery.length > 0 || state.visionGallery.length > 0;
-      if (has) dock.removeAttribute('hidden');
-      else dock.setAttribute('hidden', '');
+      if (!locked) {
+        if (has) dock.removeAttribute('hidden');
+        else dock.setAttribute('hidden', '');
+        if (ph) ph.setAttribute('hidden', '');
+        return;
+      }
+      dock.removeAttribute('hidden');
+      if (ph) {
+        if (has) ph.setAttribute('hidden', '');
+        else ph.removeAttribute('hidden');
+      }
+    }
+
+    function lockGamePanelLayout() {
+      if (!state.authHeader) return;
+      const vg = $('view-game');
+      if (!vg || !vg.classList.contains('active')) return;
+      const panel = document.querySelector('#view-game .panel');
+      if (!panel) return;
+      panel.classList.add('game-layout-locked');
+      const en = state.enabledInputModes || ['buttons'];
+      panel.classList.toggle('game-single-mode', en.length < 2);
+      syncMatchHistoryDockVisibility();
+    }
+
+    function unlockGamePanelLayout() {
+      const panel = document.querySelector('#view-game .panel');
+      if (panel) {
+        panel.classList.remove('game-layout-locked', 'game-single-mode');
+      }
+      const ph = $('match-history-placeholder');
+      if (ph) ph.setAttribute('hidden', '');
+      syncMatchHistoryDockVisibility();
     }
 
     function roundNumFromPlay(data) {
@@ -1635,6 +1732,7 @@
           btn.tabIndex = on ? 0 : -1;
         }
       }
+      lockGamePanelLayout();
     }
 
     function resolveActiveInputMode() {
@@ -1776,6 +1874,7 @@
     }
 
     function showLogin() {
+      unlockGamePanelLayout();
       closeVisionWebcamModal();
       clearMatchPlayGalleries();
       $('view-game').classList.remove('active');
