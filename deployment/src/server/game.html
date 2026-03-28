@@ -514,6 +514,81 @@
       font-weight: 600;
     }
 
+    .text-match-gallery {
+      padding: 0.65rem 0.7rem;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.18);
+      border: 1px solid var(--border);
+    }
+
+    .text-match-gallery[hidden] {
+      display: none !important;
+    }
+
+    .text-gallery-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+      max-width: 5.5rem;
+    }
+
+    .text-gallery-emoji {
+      width: 4.5rem;
+      height: 4.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.35rem;
+      line-height: 1;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.28);
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
+    }
+
+    .text-gallery-item.tile-rock .text-gallery-emoji { border-color: rgba(94, 228, 163, 0.45); }
+    .text-gallery-item.tile-paper .text-gallery-emoji { border-color: rgba(124, 92, 255, 0.5); }
+    .text-gallery-item.tile-scissors .text-gallery-emoji { border-color: rgba(255, 138, 122, 0.5); }
+    .text-gallery-item.tile-none .text-gallery-emoji { border-color: rgba(196, 181, 253, 0.45); }
+
+    .text-gallery-cap {
+      font-size: 0.68rem;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.25;
+      word-break: break-word;
+    }
+
+    .text-gallery-cap strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .you-play-line,
+    .house-play-line {
+      display: block;
+      font-size: 0.62rem;
+      line-height: 1.35;
+      margin-top: 0.2rem;
+    }
+
+    .you-play-line {
+      color: var(--text);
+    }
+
+    .house-play-line {
+      color: var(--muted);
+    }
+
+    .house-play-line .hi { font-weight: 600; color: var(--text); }
+
+    .house-play-pending {
+      color: var(--muted);
+      opacity: 0.75;
+      font-style: italic;
+    }
+
     .btn-ghost {
       margin-top: 1rem;
       width: 100%;
@@ -881,6 +956,7 @@
           <div class="round-result" id="round-result">
             <span class="muted-hint">Pick a move to begin.</span>
           </div>
+          <div id="text-match-gallery" class="text-match-gallery" hidden></div>
           <div id="vision-match-gallery" class="vision-match-gallery" hidden></div>
         </div>
 
@@ -918,6 +994,7 @@
       ml: { visionSession: null, visionVersion: null },
       visionWebcamStream: null,
       visionGallery: [],
+      textGestureGallery: [],
       enabledInputModes: ['buttons'],
       activeInputMode: 'buttons',
       canVisionFile: false,
@@ -1101,6 +1178,98 @@
       return c.toDataURL('image/jpeg', 0.85);
     }
 
+    const TEXT_MOVE_UI = {
+      rock: { emoji: '🪨', label: 'Rock', tileClass: 'tile-rock' },
+      paper: { emoji: '📄', label: 'Paper', tileClass: 'tile-paper' },
+      scissors: { emoji: '✂️', label: 'Scissors', tileClass: 'tile-scissors' },
+      none: { emoji: '✨', label: 'None', tileClass: 'tile-none' },
+    };
+
+    function textMoveUi(move) {
+      const m = String(move || '').toLowerCase();
+      return TEXT_MOVE_UI[m] || { emoji: '❔', label: String(move || '?'), tileClass: '' };
+    }
+
+    function roundNumFromPlay(data) {
+      const n = Number(data && data.round);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function houseLineHtml(serverMove, pending) {
+      if (pending) {
+        return '<span class="house-play-line"><span class="house-play-pending">House · …</span></span>';
+      }
+      const hu = textMoveUi(serverMove);
+      return (
+        '<span class="house-play-line">House · <span aria-hidden="true">' +
+        hu.emoji +
+        '</span> <span class="hi">' +
+        escapeHtmlVision(hu.label) +
+        '</span></span>'
+      );
+    }
+
+    function appendTileOrVoiceHistory(data, viaAudio) {
+      state.textGestureGallery.push({
+        round: roundNumFromPlay(data),
+        move: String(data.player_move != null ? data.player_move : ''),
+        houseMove: String(data.server_move != null ? data.server_move : ''),
+        viaAudio: !!viaAudio,
+      });
+      renderTextMatchGallery();
+    }
+
+    function patchLastVisionWithHouse(data) {
+      const arr = state.visionGallery;
+      if (!arr.length) return;
+      const last = arr[arr.length - 1];
+      const rn = roundNumFromPlay(data);
+      if (rn) last.round = rn;
+      last.houseMove = String(data.server_move != null ? data.server_move : '');
+      renderVisionMatchGallery();
+    }
+
+    function renderTextMatchGallery() {
+      const host = $('text-match-gallery');
+      if (!host) return;
+      if (!state.textGestureGallery.length) {
+        host.replaceChildren();
+        host.hidden = true;
+        return;
+      }
+      host.hidden = false;
+      const title = document.createElement('p');
+      title.className = 'vision-gallery-title';
+      title.textContent = 'Text & voice plays this match';
+      const strip = document.createElement('div');
+      strip.className = 'vision-gallery-strip';
+      for (let i = 0; i < state.textGestureGallery.length; i++) {
+        const item = state.textGestureGallery[i];
+        const ui = textMoveUi(item.move);
+        const wrap = document.createElement('div');
+        wrap.className = 'text-gallery-item' + (ui.tileClass ? ' ' + ui.tileClass : '');
+        const em = document.createElement('div');
+        em.className = 'text-gallery-emoji';
+        em.setAttribute('aria-hidden', 'true');
+        em.textContent = ui.emoji;
+        const cap = document.createElement('span');
+        cap.className = 'text-gallery-cap';
+        const mic = item.viaAudio ? '<span aria-hidden="true">🎤</span> ' : '';
+        cap.innerHTML =
+          'Round <strong>' + item.round + '</strong><br>' +
+          '<span class="you-play-line">' +
+          mic +
+          'You · <span class="hi">' +
+          escapeHtmlVision(ui.label) +
+          '</span></span>' +
+          houseLineHtml(item.houseMove, false);
+        wrap.appendChild(em);
+        wrap.appendChild(cap);
+        strip.appendChild(wrap);
+      }
+      host.replaceChildren(title, strip);
+    }
+
     function renderVisionMatchGallery() {
       const host = $('vision-match-gallery');
       if (!host) return;
@@ -1121,11 +1290,21 @@
         wrap.className = 'vision-gallery-item';
         const img = document.createElement('img');
         img.src = item.thumb;
-        img.alt = 'Round ' + item.round + ', model label ' + item.label;
+        const hasHouse = item.houseMove != null && item.houseMove !== '';
+        img.alt =
+          'Round ' +
+          item.round +
+          ', you ' +
+          item.label +
+          (hasHouse ? ', house ' + item.houseMove : '');
         const cap = document.createElement('span');
         cap.className = 'vision-gallery-cap';
         cap.innerHTML =
-          'Round <strong>' + item.round + '</strong><br>' + escapeHtmlVision(item.label);
+          'Round <strong>' + item.round + '</strong><br>' +
+          '<span class="you-play-line">You · <span class="hi">' +
+          escapeHtmlVision(item.label) +
+          '</span></span>' +
+          houseLineHtml(item.houseMove, !hasHouse);
         wrap.appendChild(img);
         wrap.appendChild(cap);
         strip.appendChild(wrap);
@@ -1140,13 +1319,16 @@
         thumb: canvasToVisionThumbDataUrl(canvas, 112),
         label: String(label),
         round,
+        houseMove: null,
       });
       renderVisionMatchGallery();
     }
 
-    function clearVisionMatchGallery() {
+    function clearMatchPlayGalleries() {
       state.visionGallery = [];
+      state.textGestureGallery = [];
       renderVisionMatchGallery();
+      renderTextMatchGallery();
     }
 
     async function runVisionOnCanvas(canvas, v) {
@@ -1163,7 +1345,7 @@
       }
       const label = (v.labels && v.labels[bi]) ? v.labels[bi] : 'none';
       recordVisionClassification(canvas, label);
-      onPlayMove(label === 'none' ? 'none' : label);
+      onPlayMove(label === 'none' ? 'none' : label, 'vision');
     }
 
     async function runVisionOnFile(file) {
@@ -1273,7 +1455,7 @@
       r.onresult = (e) => {
         const t = (e.results[0] && e.results[0][0] && e.results[0][0].transcript) || '';
         const move = transcriptToMove(t);
-        if (move) onPlayMove(move);
+        if (move) onPlayMove(move, 'audio');
         else {
           $('round-result').className = 'round-result';
           $('round-result').innerHTML = '<span style="color:var(--lose)">Say rock, paper, scissors, or none. Heard: ' + (t || '(empty)') + '</span>';
@@ -1486,7 +1668,7 @@
 
     function showLogin() {
       closeVisionWebcamModal();
-      clearVisionMatchGallery();
+      clearMatchPlayGalleries();
       $('view-game').classList.remove('active');
       $('view-login').classList.add('active');
       state.sessionId = null;
@@ -1606,7 +1788,7 @@
 
     async function startSession() {
       const data = await api('/sessions', { method: 'POST', body: '{}' });
-      clearVisionMatchGallery();
+      clearMatchPlayGalleries();
       state.sessionId = data.session_id;
       state.maxRounds = data.max_rounds || 5;
       $('round-max').textContent = state.maxRounds;
@@ -1640,7 +1822,7 @@
       }
     }
 
-    async function onPlayMove(move) {
+    async function onPlayMove(move, playSource) {
       if (state.busy || !state.sessionId) return;
       const image = move === 'none' ? '' : move;
       setTilesDisabled(true);
@@ -1652,6 +1834,13 @@
         });
         updateScores(data);
         renderRoundResult(data);
+        if (playSource === 'buttons') {
+          appendTileOrVoiceHistory(data, false);
+        } else if (playSource === 'audio') {
+          appendTileOrVoiceHistory(data, true);
+        } else if (playSource === 'vision') {
+          patchLastVisionWithHouse(data);
+        }
         if (data.match_complete) {
           matchJustEnded = true;
           const nm = $('btn-new-match');
@@ -1659,6 +1848,10 @@
           refreshUserStats();
         }
       } catch (e) {
+        if (playSource === 'vision' && state.visionGallery.length) {
+          state.visionGallery.pop();
+          renderVisionMatchGallery();
+        }
         $('round-result').className = 'round-result';
         $('round-result').innerHTML = '<span style="color:var(--lose)">' + (e.message || 'Play failed') + '</span>';
       } finally {
@@ -1723,7 +1916,7 @@
     $('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') onLogin(); });
 
     document.querySelectorAll('.tile').forEach((btn) => {
-      btn.addEventListener('click', () => onPlayMove(btn.getAttribute('data-move')));
+      btn.addEventListener('click', () => onPlayMove(btn.getAttribute('data-move'), 'buttons'));
     });
 
     $('btn-new-match').addEventListener('click', () => { onNewMatch(); });
