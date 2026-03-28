@@ -395,6 +395,78 @@
       background: rgba(124, 92, 255, 0.08);
     }
 
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .alt-inputs {
+      margin-bottom: 0.95rem;
+    }
+
+    .alt-inputs-label {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 0.45rem;
+    }
+
+    .alt-inputs-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+    }
+
+    .alt-inputs-row.single-col {
+      grid-template-columns: 1fr;
+    }
+
+    .btn-alt {
+      min-height: 48px;
+      padding: 0.55rem 0.65rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.22);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+    }
+
+    .btn-alt:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-alt:not(:disabled):active {
+      transform: scale(0.98);
+    }
+
+    .alt-inputs-hint {
+      font-size: 0.62rem;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 0.4rem;
+      line-height: 1.35;
+    }
+
     .view { display: none; }
     .view.active { display: block; }
 
@@ -598,6 +670,16 @@
           </button>
         </div>
 
+        <div id="alt-inputs" class="alt-inputs" style="display: none;" aria-label="Photo and voice input">
+          <p class="alt-inputs-label">Also play with</p>
+          <div class="alt-inputs-row" id="alt-inputs-row">
+            <button type="button" class="btn-alt" id="btn-vision" style="display: none;" disabled aria-label="Use camera or photo">📷 Photo</button>
+            <input type="file" id="vision-file-input" accept="image/*" capture="environment" class="sr-only" tabindex="-1" title="Choose image" />
+            <button type="button" class="btn-alt" id="btn-audio" style="display: none;" disabled aria-label="Speak your move">🎤 Speak</button>
+          </div>
+          <p class="alt-inputs-hint" id="alt-inputs-hint"></p>
+        </div>
+
         <div class="round-result" id="round-result">
           <span class="muted-hint">Pick a move to begin.</span>
         </div>
@@ -616,6 +698,8 @@
       sessionId: null,
       maxRounds: 5,
       busy: false,
+      mlBundle: null,
+      ml: { visionSession: null, visionVersion: null },
     };
 
     function basicAuthHeader(user, pass) {
@@ -657,6 +741,238 @@
       return data;
     }
 
+    function resetMlClientState() {
+      state.mlBundle = null;
+      const vs = state.ml.visionSession;
+      state.ml.visionSession = null;
+      state.ml.visionVersion = null;
+      if (vs && typeof vs.release === 'function') {
+        try { vs.release(); } catch (_) {}
+      }
+    }
+
+    function mlIdbOpen() {
+      return new Promise((resolve, reject) => {
+        const r = indexedDB.open('rps-ml-cache', 1);
+        r.onerror = () => reject(r.error);
+        r.onsuccess = () => resolve(r.result);
+        r.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('models')) db.createObjectStore('models');
+        };
+      });
+    }
+
+    async function mlIdbGet(key) {
+      const db = await mlIdbOpen();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('models', 'readonly');
+        const q = tx.objectStore('models').get(key);
+        q.onsuccess = () => resolve(q.result);
+        q.onerror = () => reject(q.error);
+      });
+    }
+
+    async function mlIdbSet(key, val) {
+      const db = await mlIdbOpen();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('models', 'readwrite');
+        tx.objectStore('models').put(val, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function ensureOrtLoaded(info) {
+      if (window.ort) return;
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = info.ort_min_js;
+        s.async = true;
+        s.crossOrigin = 'anonymous';
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Could not load ONNX Runtime Web'));
+        document.head.appendChild(s);
+      });
+      ort.env.wasm.wasmPaths = info.wasm_base;
+    }
+
+    function buildNCHWTensorFromCanvas(canvas, inp) {
+      const W = inp.width;
+      const H = inp.height;
+      const mean = inp.mean || [0.485, 0.456, 0.406];
+      const std = inp.std || [0.229, 0.224, 0.225];
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const imgData = ctx.getImageData(0, 0, W, H);
+      const d = imgData.data;
+      const out = new Float32Array(1 * 3 * H * W);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          const r = d[i] / 255;
+          const g = d[i + 1] / 255;
+          const b = d[i + 2] / 255;
+          const nx = x;
+          const ny = y;
+          out[0 * H * W + ny * W + nx] = (r - mean[0]) / std[0];
+          out[1 * H * W + ny * W + nx] = (g - mean[1]) / std[1];
+          out[2 * H * W + ny * W + nx] = (b - mean[2]) / std[2];
+        }
+      }
+      return new ort.Tensor('float32', out, [1, 3, H, W]);
+    }
+
+    async function runVisionOnFile(file) {
+      const bundle = state.mlBundle;
+      const v = bundle && bundle.vision;
+      if (!v || !v.available || !v.model_url) throw new Error('Vision model not available');
+      await ensureOrtLoaded(bundle.onnx_runtime_web);
+      const cacheKey = 'vision:' + v.version + ':' + v.sha256;
+      let buf = await mlIdbGet(cacheKey);
+      if (!buf) {
+        const prefix = apiBase();
+        const url = prefix ? prefix + v.model_url : v.model_url;
+        const res = await fetch(url, { headers: { Authorization: state.authHeader } });
+        if (!res.ok) throw new Error('Model download failed');
+        buf = await res.arrayBuffer();
+        await mlIdbSet(cacheKey, buf);
+      }
+      if (state.ml.visionVersion !== v.version || !state.ml.visionSession) {
+        if (state.ml.visionSession && typeof state.ml.visionSession.release === 'function') {
+          try { state.ml.visionSession.release(); } catch (_) {}
+        }
+        state.ml.visionSession = await ort.InferenceSession.create(buf, { executionProviders: ['wasm'] });
+        state.ml.visionVersion = v.version;
+      }
+      const bmp = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      canvas.width = v.input.width;
+      canvas.height = v.input.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const tensor = buildNCHWTensorFromCanvas(canvas, v.input);
+      const inName = v.input.name || 'input';
+      const feeds = {};
+      feeds[inName] = tensor;
+      const results = await state.ml.visionSession.run(feeds);
+      const outName = Object.keys(results)[0];
+      const logits = results[outName].data;
+      let bi = 0;
+      for (let i = 1; i < logits.length; i++) {
+        if (logits[i] > logits[bi]) bi = i;
+      }
+      const label = (v.labels && v.labels[bi]) ? v.labels[bi] : 'none';
+      onPlayMove(label === 'none' ? 'none' : label);
+    }
+
+    function transcriptToMove(text) {
+      const t = (text || '').toLowerCase();
+      if (/\brock\b|\bstone\b/.test(t)) return 'rock';
+      if (/\bpaper\b/.test(t)) return 'paper';
+      if (/\bscissors?\b/.test(t)) return 'scissors';
+      if (/\bnone\b|\brandom\b/.test(t)) return 'none';
+      if (t.includes('rock')) return 'rock';
+      if (t.includes('paper')) return 'paper';
+      if (t.includes('scissor')) return 'scissors';
+      return null;
+    }
+
+    function startBrowserSpeech() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const bundle = state.mlBundle;
+      if (!SR || !bundle || !bundle.audio || !bundle.audio.browser_speech) return;
+      if (state.busy || !state.sessionId) return;
+      const r = new SR();
+      r.lang = bundle.audio.browser_speech.locale || 'en-US';
+      r.interimResults = false;
+      r.maxAlternatives = 1;
+      r.onresult = (e) => {
+        const t = (e.results[0] && e.results[0][0] && e.results[0][0].transcript) || '';
+        const move = transcriptToMove(t);
+        if (move) onPlayMove(move);
+        else {
+          $('round-result').className = 'round-result';
+          $('round-result').innerHTML = '<span style="color:var(--lose)">Say rock, paper, scissors, or none. Heard: ' + (t || '(empty)') + '</span>';
+        }
+      };
+      r.onerror = () => {};
+      try {
+        r.start();
+      } catch (_) {}
+    }
+
+    async function refreshMlManifest() {
+      const wrap = $('alt-inputs');
+      const row = $('alt-inputs-row');
+      const hint = $('alt-inputs-hint');
+      const btnV = $('btn-vision');
+      const btnA = $('btn-audio');
+      if (!state.authHeader) {
+        wrap.style.display = 'none';
+        return;
+      }
+      try {
+        const b = await api('/me/ml/manifest', { method: 'GET' });
+        state.mlBundle = b;
+        const modes = b.input_modes || ['buttons'];
+        const wantVision = modes.indexOf('vision') >= 0;
+        const wantAudio = modes.indexOf('audio') >= 0;
+        const show = wantVision || wantAudio;
+        wrap.style.display = show ? 'block' : 'none';
+        if (!show) return;
+
+        let vHint = '';
+        if (wantVision) {
+          btnV.style.display = 'flex';
+          const v = b.vision;
+          if (v && v.available) {
+            btnV.disabled = false;
+            btnV.title = 'Open camera or photo library';
+          } else {
+            btnV.disabled = true;
+            btnV.title = 'Add ml_artifacts/vision/model.onnx on the server';
+            vHint = 'Vision: deploy ONNX on the server to enable photo mode.';
+          }
+        } else {
+          btnV.style.display = 'none';
+        }
+
+        let aHint = '';
+        if (wantAudio) {
+          btnA.style.display = 'flex';
+          const a = b.audio;
+          const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          const stt = a && a.browser_speech && a.browser_speech.enabled && SR;
+          const onnxA = a && a.onnx && a.onnx.available;
+          if (stt) {
+            btnA.disabled = false;
+            btnA.title = 'Speak: rock, paper, scissors, or none';
+          } else if (onnxA) {
+            btnA.disabled = true;
+            btnA.title = 'Audio ONNX UI not enabled in this client build; use browser speech in manifest.';
+            aHint = 'Audio: enable browser speech in ml_artifacts/audio/manifest.json or use speech-capable browser.';
+          } else {
+            btnA.disabled = true;
+            btnA.title = 'Speech not available';
+            aHint = 'Audio: use a browser with Web Speech API or deploy models.';
+          }
+        } else {
+          btnA.style.display = 'none';
+        }
+
+        const parts = [vHint, aHint].filter(Boolean);
+        hint.textContent = parts.join(' ');
+
+        let cols = 0;
+        if (wantVision) cols++;
+        if (wantAudio) cols++;
+        row.classList.toggle('single-col', cols === 1);
+      } catch (_) {
+        wrap.style.display = 'none';
+        state.mlBundle = null;
+      }
+    }
+
     function showLoginError(msg) {
       const el = $('login-error');
       el.textContent = msg;
@@ -681,6 +997,9 @@
       $('view-game').classList.remove('active');
       $('view-login').classList.add('active');
       state.sessionId = null;
+      resetMlClientState();
+      const alt = $('alt-inputs');
+      if (alt) alt.style.display = 'none';
       const st = $('user-stats');
       st.textContent = '';
       st.classList.remove('visible');
@@ -818,6 +1137,7 @@
         await startSession();
         showGame();
         await refreshUserStats();
+        await refreshMlManifest();
       } catch (e) {
         showLoginError(e.message || 'Sign-in failed. Check username and password.');
         state.authHeader = null;
@@ -861,6 +1181,7 @@
         $('round-result').className = 'round-result';
         $('round-result').innerHTML = '<span style="color:var(--muted)">New match. Choose your move.</span>';
         await refreshUserStats();
+        await refreshMlManifest();
       } catch (e) {
         $('round-result').className = 'round-result';
         $('round-result').innerHTML = '<span style="color:var(--lose)">' + (e.message || 'Could not start match') + '</span>';
@@ -868,6 +1189,29 @@
         setTilesDisabled(false);
       }
     }
+
+    $('btn-vision').addEventListener('click', () => {
+      if ($('btn-vision').disabled) return;
+      $('vision-file-input').click();
+    });
+
+    $('vision-file-input').addEventListener('change', async (e) => {
+      const inp = e.target;
+      const f = inp.files && inp.files[0];
+      inp.value = '';
+      if (!f || state.busy || !state.sessionId) return;
+      try {
+        await runVisionOnFile(f);
+      } catch (err) {
+        $('round-result').className = 'round-result';
+        $('round-result').innerHTML = '<span style="color:var(--lose)">' + (err.message || 'Vision failed') + '</span>';
+      }
+    });
+
+    $('btn-audio').addEventListener('click', () => {
+      if ($('btn-audio').disabled) return;
+      startBrowserSpeech();
+    });
 
     $('btn-login').addEventListener('click', onLogin);
     $('username').addEventListener('keydown', (e) => { if (e.key === 'Enter') onLogin(); });

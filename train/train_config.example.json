@@ -1,0 +1,15 @@
+{
+  "device": "auto",
+  "data_dir": "/Users/venkatababjisama/wa/self/ivenkatababji/vu-rsp-dc/data/Rock-Paper-Scissors",
+  "csv": "//Users/venkatababjisama/wa/self/ivenkatababji/vu-rsp-dc/data/Rock-Paper-Scissors/all.csv",
+  "filename_column": "file_path",
+  "label_column": "label",
+  "image_size": 224,
+  "epochs": 20,
+  "batch_size": 16,
+  "lr": 0.0003,
+  "val_frac": 0.15,
+  "seed": 42,
+  "out_dir": "export_rps",
+  "manifest_version": "1.0.0"
+}

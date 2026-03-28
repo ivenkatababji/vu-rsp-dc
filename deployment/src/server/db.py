@@ -50,6 +50,13 @@ def init_db(path: Optional[str] = None) -> None:
             conn.commit()
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute(
+                "ALTER TABLE config ADD COLUMN input_modes_json TEXT NOT NULL DEFAULT '[\"buttons\"]'"
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
         conn.executescript("""
 
         CREATE TABLE IF NOT EXISTS game_stats (
@@ -79,19 +86,44 @@ def init_db(path: Optional[str] = None) -> None:
         conn.commit()
 
 
+def _parse_input_modes(raw: Any) -> list[str]:
+    if raw is None or raw == "":
+        return ["buttons"]
+    if isinstance(raw, list):
+        return [str(x) for x in raw if x]
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return [str(x) for x in data if x]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return ["buttons"]
+
+
 def get_config() -> dict[str, Any]:
     with _lock:
         conn = get_conn()
         try:
             row = conn.execute(
-                "SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds FROM config WHERE id = 1"
+                "SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds, input_modes_json FROM config WHERE id = 1"
             ).fetchone()
         except sqlite3.OperationalError:
-            row = conn.execute(
-                "SELECT max_rounds, max_sessions, session_timeout_seconds FROM config WHERE id = 1"
-            ).fetchone()
+            try:
+                row = conn.execute(
+                    "SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds FROM config WHERE id = 1"
+                ).fetchone()
+            except sqlite3.OperationalError:
+                row = conn.execute(
+                    "SELECT max_rounds, max_sessions, session_timeout_seconds FROM config WHERE id = 1"
+                ).fetchone()
         if not row:
-            return {"max_rounds": 5, "max_sessions": 10, "session_timeout_seconds": 0, "retention_seconds": 604800}
+            return {
+                "max_rounds": 5,
+                "max_sessions": 10,
+                "session_timeout_seconds": 0,
+                "retention_seconds": 604800,
+                "input_modes": ["buttons"],
+            }
         out = {
             "max_rounds": row["max_rounds"],
             "max_sessions": row["max_sessions"],
@@ -101,6 +133,10 @@ def get_config() -> dict[str, Any]:
             out["retention_seconds"] = row["retention_seconds"]
         except (KeyError, IndexError):
             out["retention_seconds"] = 604800
+        try:
+            out["input_modes"] = _parse_input_modes(row["input_modes_json"])
+        except (KeyError, IndexError):
+            out["input_modes"] = ["buttons"]
         return out
 
 
@@ -109,6 +145,7 @@ def set_config(
     max_sessions: Optional[int] = None,
     session_timeout_seconds: Optional[int] = None,
     retention_seconds: Optional[int] = None,
+    input_modes: Optional[list[str]] = None,
 ) -> None:
     conn = get_conn()
     updates = []
@@ -125,6 +162,9 @@ def set_config(
     if retention_seconds is not None:
         updates.append("retention_seconds = ?")
         params.append(retention_seconds)
+    if input_modes is not None:
+        updates.append("input_modes_json = ?")
+        params.append(json.dumps(input_modes))
     if updates:
         params.append(1)
         with _lock:

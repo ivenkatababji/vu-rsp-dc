@@ -1,0 +1,4 @@
+{
+  "export_dir": "export_rps",
+  "dest": "../deployment/src/server/ml_artifacts/vision"
+}

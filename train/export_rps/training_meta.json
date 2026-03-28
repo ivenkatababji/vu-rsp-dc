@@ -1,0 +1,12 @@
+{
+  "image_size": 224,
+  "val_acc": 1.0,
+  "n_train": 2142,
+  "n_val": 378,
+  "labels": [
+    "rock",
+    "paper",
+    "scissors",
+    "none"
+  ]
+}

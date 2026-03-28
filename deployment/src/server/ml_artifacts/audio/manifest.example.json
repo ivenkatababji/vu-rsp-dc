@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "browser_speech": {
+    "enabled": true,
+    "locale": "en-US"
+  },
+  "labels": ["rock", "paper", "scissors", "none"],
+  "input": {
+    "name": "input",
+    "width": 224,
+    "height": 224,
+    "layout": "NCHW"
+  }
+}

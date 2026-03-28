@@ -222,6 +222,20 @@
       color: var(--muted);
       margin-top: 0.25rem;
     }
+    .form-group .hint code { font-size: 0.7rem; }
+    .checkbox-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin-top: 0.5rem;
+    }
+    .checkbox-row label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 400;
+      cursor: pointer;
+    }
     .form-group input {
       width: 100%;
       padding: 0.5rem 0.75rem;
@@ -333,6 +347,15 @@
               <label for="cfg-retention">Retention (seconds)</label>
               <input type="number" id="cfg-retention" name="retention_seconds" min="0">
               <div class="hint">How long to keep expired sessions before pruning. Default 604800 (7 days).</div>
+            </div>
+            <div class="form-group">
+              <label>Client input modes</label>
+              <div class="hint">Controls which options appear in the web game. Buttons are always on. Vision needs <code>ml_artifacts/vision/model.onnx</code>. Audio can use the browser’s speech API or an ONNX model under <code>ml_artifacts/audio/</code>.</div>
+              <div class="checkbox-row">
+                <label><input type="checkbox" id="cfg-mode-buttons" checked disabled> Buttons</label>
+                <label><input type="checkbox" id="cfg-mode-vision"> Vision (camera / photo → local ONNX)</label>
+                <label><input type="checkbox" id="cfg-mode-audio"> Audio (speech)</label>
+              </div>
             </div>
             <div class="form-actions">
               <button type="submit" id="btn-save">Save changes</button>
@@ -515,6 +538,10 @@
             <label>Retention (before prune)</label>
             <div class="value">${fmtDuration(cfg.retention_seconds)}</div>
           </div>
+          <div class="config-item">
+            <label>Client input modes</label>
+            <div class="value">${(cfg.input_modes || ['buttons']).join(', ')}</div>
+          </div>
         `;
         $('dash-config').className = 'config-grid';
 
@@ -585,6 +612,9 @@
         $('cfg-max-sessions').value = cfg.max_sessions;
         $('cfg-timeout').value = cfg.session_timeout_seconds;
         $('cfg-retention').value = cfg.retention_seconds != null ? cfg.retention_seconds : 604800;
+        const modes = cfg.input_modes || ['buttons'];
+        $('cfg-mode-vision').checked = modes.includes('vision');
+        $('cfg-mode-audio').checked = modes.includes('audio');
       } catch (e) {
         $('settings-error').textContent = e.message || String(e);
         $('settings-error').style.display = 'block';
@@ -600,11 +630,15 @@
       successEl.style.display = 'none';
       btn.disabled = true;
       try {
+        const input_modes = ['buttons'];
+        if ($('cfg-mode-vision').checked) input_modes.push('vision');
+        if ($('cfg-mode-audio').checked) input_modes.push('audio');
         const body = {
           max_rounds: parseInt($('cfg-max-rounds').value, 10),
           max_sessions: parseInt($('cfg-max-sessions').value, 10),
           session_timeout_seconds: parseInt($('cfg-timeout').value, 10),
-          retention_seconds: parseInt($('cfg-retention').value, 10)
+          retention_seconds: parseInt($('cfg-retention').value, 10),
+          input_modes: input_modes
         };
         const res = await fetch('/admin/cfg', {
           method: 'PUT',

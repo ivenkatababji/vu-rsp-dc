@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "labels": [
+    "rock",
+    "paper",
+    "scissors",
+    "none"
+  ],
+  "input": {
+    "name": "input",
+    "width": 224,
+    "height": 224,
+    "layout": "NCHW",
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ]
+  },
+  "output": {
+    "name": "logits"
+  }
+}

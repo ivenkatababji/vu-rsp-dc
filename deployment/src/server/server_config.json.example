@@ -1,3 +1,4 @@
 {
-  "db_path": ":memory:"
+  "db_path": ":memory:",
+  "vision_input_size": 224
 }

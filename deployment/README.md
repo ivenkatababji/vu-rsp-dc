@@ -44,6 +44,27 @@ replaced with a real image classification model.
 
 ------------------------------------------------------------------------
 
+Sibling of this folder (repo root):
+
+    train/
+        train_export.py           # Train/export ONNX; single arg: JSON config path
+        deploy_model.py           # Copy into deployment/.../ml_artifacts/vision; single arg: JSON config
+        train_config.example.json
+        deploy_config.example.json
+        json_config.py
+        requirements-train.txt
+        README.md
+
+------------------------------------------------------------------------
+
+## Vision model (training and deploy)
+
+Train a browser-compatible ONNX classifier from a labeled CSV and image folder, then deploy into `src/server/ml_artifacts/vision/`. The tooling lives in **`../train/`** (sibling of `deployment/`). Pass a **JSON config** path to `train_export.py` and `deploy_model.py` (see `../train/train_config.example.json` and `../train/deploy_config.example.json`). Details in **`../train/README.md`**.
+
+Optional **`server_config.json`** keys **`vision_input_size`** (square) or **`vision_input_width`** / **`vision_input_height`** set default manifest dimensions when no `manifest.json` is present yet. Deployed **`ml_artifacts/vision/manifest.json`** overrides those for the live model.
+
+------------------------------------------------------------------------
+
 ## Installation
 
 Install the required dependencies:

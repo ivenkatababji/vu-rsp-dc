@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from admin_auth import verify_admin
@@ -13,8 +13,21 @@ from game_auth import verify_game_user
 from classifier import classify_image
 from game import random_move, decide_winner
 import db
+import ml_manifest
 
 app = FastAPI(title="Rock Paper Scissors ML Experiment")
+
+_VALID_INPUT_MODES = frozenset({"buttons", "vision", "audio"})
+
+
+def _normalize_input_modes(modes: list[str]) -> list[str]:
+    out: list[str] = []
+    for m in modes:
+        if m in _VALID_INPUT_MODES and m not in out:
+            out.append(m)
+    if "buttons" not in out:
+        out.insert(0, "buttons")
+    return out
 
 # Admin routes: protected by HTTP Basic Auth (credentials in admin_config.json)
 admin_router = APIRouter(prefix="/admin", dependencies=[Depends(verify_admin)])
@@ -134,6 +147,7 @@ class ConfigResponse(BaseModel):
     max_sessions: int
     session_timeout_seconds: int
     retention_seconds: int
+    input_modes: list[str]
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -141,6 +155,7 @@ class ConfigUpdateRequest(BaseModel):
     max_sessions: Optional[int] = None
     session_timeout_seconds: Optional[int] = None
     retention_seconds: Optional[int] = None
+    input_modes: Optional[list[str]] = None
 
 
 class PruneRequest(BaseModel):
@@ -167,6 +182,32 @@ def _get_session(session_id: str) -> SessionState:
         raise HTTPException(status_code=404, detail="Session expired")
     state["session_id"] = session_id
     return state
+
+
+@app.get("/me/ml/manifest")
+def get_ml_manifest(_username: str = Depends(verify_game_user)):
+    """
+    Client-side ML bundle: enabled input modes, ONNX manifests, ORT Web CDN pins.
+    Vision/audio models are optional; when absent, available=false and UI falls back to buttons (and browser STT for audio if enabled).
+    """
+    cfg = db.get_config()
+    modes = _normalize_input_modes(cfg.get("input_modes") or ["buttons"])
+    return ml_manifest.build_ml_bundle(modes)
+
+
+@app.get("/me/ml/models/{kind}")
+def download_ml_model(kind: str, _username: str = Depends(verify_game_user)):
+    """Authenticated download of ONNX artifact (vision or audio)."""
+    if kind not in ("vision", "audio"):
+        raise HTTPException(status_code=404, detail="Unknown model kind")
+    path = ml_manifest.model_file_for_kind(kind)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Model not deployed")
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename="model.onnx",
+    )
 
 
 @app.get("/me/stats", response_model=UserStatsResponse)
@@ -396,6 +437,7 @@ def admin_get_config():
         max_sessions=config.get("max_sessions", 0),
         session_timeout_seconds=config.get("session_timeout_seconds", 0),
         retention_seconds=config.get("retention_seconds", 604800),
+        input_modes=_normalize_input_modes(config.get("input_modes") or ["buttons"]),
     )
 
 
@@ -410,11 +452,23 @@ def admin_update_config(body: ConfigUpdateRequest):
         raise HTTPException(status_code=400, detail="session_timeout_seconds cannot be negative")
     if body.retention_seconds is not None and body.retention_seconds < 0:
         raise HTTPException(status_code=400, detail="retention_seconds cannot be negative")
+    input_modes_norm: Optional[list[str]] = None
+    if body.input_modes is not None:
+        if not body.input_modes:
+            raise HTTPException(status_code=400, detail="input_modes cannot be empty")
+        unknown = [m for m in body.input_modes if m not in _VALID_INPUT_MODES]
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid input_modes: {unknown}. Use buttons, vision, audio.",
+            )
+        input_modes_norm = _normalize_input_modes(body.input_modes)
     db.set_config(
         max_rounds=body.max_rounds,
         max_sessions=body.max_sessions,
         session_timeout_seconds=body.session_timeout_seconds,
         retention_seconds=body.retention_seconds,
+        input_modes=input_modes_norm,
     )
     return admin_get_config()
 
