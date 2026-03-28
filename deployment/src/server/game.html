@@ -269,53 +269,60 @@
       margin-bottom: var(--game-stack-gap);
     }
 
-    .input-mode-switcher {
-      position: relative;
-      z-index: 5;
+    .game-panel-toolbar {
       display: flex;
-      gap: 0.3rem;
-      margin-bottom: 0.7rem;
-      padding: 0.25rem;
-      background: rgba(0, 0, 0, 0.22);
-      border-radius: 12px;
-      border: 1px solid var(--border);
+      justify-content: flex-end;
+      align-items: center;
+      margin-bottom: var(--game-stack-gap);
     }
 
-    .input-mode-switcher[hidden] {
-      display: none !important;
-    }
-
-    .input-mode-tab {
-      flex: 1;
-      min-width: 0;
-      min-height: 40px;
-      padding: 0.4rem 0.35rem;
-      border: none;
-      border-radius: 9px;
-      background: transparent;
-      color: var(--muted);
+    .game-settings-btn {
+      padding: 0.3rem 0.55rem;
       font-family: inherit;
-      font-size: 0.72rem;
+      font-size: 0.65rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
-      user-select: none;
-      -webkit-user-select: none;
-      transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
     }
 
-    .input-mode-tab.is-active {
+    .game-settings-btn:hover {
       color: var(--text);
-      background: rgba(124, 92, 255, 0.28);
-      box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.35);
+      border-color: var(--border);
+      background: rgba(0, 0, 0, 0.15);
     }
 
-    .input-mode-tab:focus-visible {
+    .game-settings-btn:focus-visible {
       outline: 2px solid var(--accent2);
       outline-offset: 2px;
+    }
+
+    .login-settings-trigger {
+      margin-top: 0.75rem;
+      width: 100%;
+      padding: 0.4rem;
+      font-family: inherit;
+      font-size: 0.8rem;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .login-settings-trigger:hover {
+      color: var(--text);
     }
 
     .input-panel[hidden] {
@@ -423,18 +430,19 @@
 
     /* Stable arena layout after input mode is known (no vertical jump from new plays / panels) */
     #view-game .panel.game-layout-locked .round-result {
-      height: 8.6rem;
-      min-height: 8.6rem;
-      max-height: 8.6rem;
+      height: 11.25rem;
+      min-height: 11.25rem;
+      max-height: 11.25rem;
       flex-shrink: 0;
     }
 
+    /* No in-game mode tabs — slot is panel only (tiles / vision / audio) */
     #view-game .panel.game-layout-locked .input-slot {
-      min-height: 11.65rem;
+      min-height: 9.35rem;
     }
 
     #view-game .panel.game-layout-locked.game-single-mode .input-slot {
-      min-height: 8.65rem;
+      min-height: 8.45rem;
     }
 
     #view-game .panel.game-layout-locked .match-history-dock {
@@ -496,13 +504,6 @@
     .match-end-score {
       font-size: 0.82rem;
       color: var(--muted);
-    }
-
-    .match-end-hint {
-      font-size: 0.7rem;
-      color: var(--muted);
-      opacity: 0.9;
-      margin-top: 0.1rem;
     }
 
     .round-result.is-match-complete.tone-you-won-match { border-color: rgba(94, 228, 163, 0.42); }
@@ -911,12 +912,6 @@
         padding: 0.45rem 0.3rem;
       }
 
-      .input-mode-tab {
-        font-size: 0.65rem;
-        min-height: 38px;
-        padding: 0.35rem 0.25rem;
-      }
-
       .tiles {
         grid-template-columns: 1fr 1fr;
         gap: 0;
@@ -948,9 +943,9 @@
       }
 
       #view-game .panel.game-layout-locked .round-result {
-        height: 7.45rem;
-        min-height: 7.45rem;
-        max-height: 7.45rem;
+        height: 9.75rem;
+        min-height: 9.75rem;
+        max-height: 9.75rem;
       }
 
       #view-game .panel.game-layout-locked .match-history-dock {
@@ -960,11 +955,11 @@
       }
 
       #view-game .panel.game-layout-locked .input-slot {
-        min-height: 9.85rem;
+        min-height: 8.5rem;
       }
 
       #view-game .panel.game-layout-locked.game-single-mode .input-slot {
-        min-height: 7.45rem;
+        min-height: 7.35rem;
       }
 
       .match-history-dock {
@@ -1018,8 +1013,7 @@
         font-size: 0.88rem;
       }
 
-      .match-end-score,
-      .match-end-hint {
+      .match-end-score {
         font-size: 0.75rem;
       }
 
@@ -1126,6 +1120,110 @@
     .vision-webcam-actions .btn-ghost {
       width: 100%;
     }
+
+    .settings-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 190;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .settings-modal[hidden] {
+      display: none !important;
+    }
+
+    .settings-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 6, 18, 0.72);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .settings-panel {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 340px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.15rem 1.2rem;
+      box-shadow: var(--tile-shadow);
+    }
+
+    .settings-panel h3 {
+      font-family: "Syne", sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 0 0 0.85rem;
+      text-align: center;
+    }
+
+    .settings-fieldset {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.65rem 0.75rem 0.75rem;
+      margin: 0 0 1rem;
+      background: rgba(0, 0, 0, 0.12);
+    }
+
+    .settings-legend {
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      padding: 0 0.35rem;
+    }
+
+    .settings-input-mode-single {
+      margin: 0;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .settings-mode-option {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin-top: 0.5rem;
+      padding: 0.45rem 0.4rem;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .settings-mode-option:first-of-type {
+      margin-top: 0.35rem;
+    }
+
+    .settings-mode-option:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .settings-mode-option input {
+      flex-shrink: 0;
+      width: 1rem;
+      height: 1rem;
+      accent-color: var(--accent2);
+      cursor: pointer;
+    }
+
+    .settings-mode-option-label {
+      font-size: 0.88rem;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .settings-panel .btn-primary {
+      width: 100%;
+    }
   </style>
 </head>
 <body>
@@ -1143,6 +1241,7 @@
 
         <button type="button" class="btn-primary" id="btn-login">Enter arena</button>
         <p class="error-msg" id="login-error"></p>
+        <button type="button" class="login-settings-trigger" id="btn-settings-login">Input mode & preferences</button>
       </div>
     </div>
 
@@ -1159,12 +1258,14 @@
             <span class="score-value" id="score-srv" aria-live="polite">0</span>
           </div>
         </div>
+        <div class="game-panel-toolbar">
+          <button type="button" class="game-settings-btn" id="btn-settings-game">Settings</button>
+        </div>
         <p class="score-match-hint">Match score: only rounds you or the house wins count. Tied rounds stay unchanged.</p>
 
         <p class="user-stats" id="user-stats" role="status" aria-live="polite"></p>
 
         <div id="game-input-section" class="game-input-section" style="display: none;" aria-label="Choose how to play your move">
-          <div id="input-mode-switcher" class="input-mode-switcher" role="tablist" aria-label="Input mode" hidden></div>
           <div class="input-slot">
           <div id="panel-buttons" class="input-panel" role="tabpanel" aria-label="Text: rock, paper, scissors, none">
             <div class="tiles">
@@ -1229,6 +1330,18 @@
         </div>
       </div>
     </div>
+
+    <div id="settings-modal" class="settings-modal" hidden>
+      <div class="settings-backdrop" id="settings-backdrop"></div>
+      <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <h3 id="settings-title">Settings</h3>
+        <fieldset class="settings-fieldset">
+          <legend class="settings-legend">Input mode</legend>
+          <div id="settings-input-mode-options"></div>
+        </fieldset>
+        <button type="button" class="btn-primary" id="settings-done">Done</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -1236,7 +1349,6 @@
 
     const INPUT_MODE_STORAGE_KEY = 'rps-input-mode';
     const INPUT_MODE_LABELS = { buttons: 'Text', vision: 'Vision', audio: 'Audio' };
-    const INPUT_MODE_PANELS = { buttons: 'panel-buttons', vision: 'panel-vision', audio: 'panel-audio' };
 
     const state = {
       authHeader: null,
@@ -1727,7 +1839,73 @@
       document.removeEventListener('keydown', visionWebcamOnEscape);
     }
 
+    function settingsModalOnEscape(e) {
+      if (e.key === 'Escape') closeSettingsModal();
+    }
+
+    function closeSettingsModal() {
+      const modal = $('settings-modal');
+      if (modal) modal.hidden = true;
+      document.removeEventListener('keydown', settingsModalOnEscape);
+    }
+
+    function openSettingsModal() {
+      closeVisionWebcamModal();
+      rebuildSettingsInputModeOptions();
+      const modal = $('settings-modal');
+      if (modal) {
+        modal.hidden = false;
+        document.addEventListener('keydown', settingsModalOnEscape);
+      }
+    }
+
+    function rebuildSettingsInputModeOptions() {
+      const host = $('settings-input-mode-options');
+      if (!host) return;
+      host.replaceChildren();
+      const enabled = state.enabledInputModes || ['buttons'];
+      if (enabled.length < 2) {
+        const p = document.createElement('p');
+        p.className = 'settings-input-mode-single';
+        p.textContent =
+          'Input mode: ' + (INPUT_MODE_LABELS[enabled[0]] || enabled[0]) + ' (only option on this server).';
+        host.appendChild(p);
+        return;
+      }
+      const groupName = 'settings-input-mode';
+      for (let i = 0; i < enabled.length; i++) {
+        const mode = enabled[i];
+        const row = document.createElement('label');
+        row.className = 'settings-mode-option';
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = groupName;
+        input.value = mode;
+        input.checked = mode === state.activeInputMode;
+        input.addEventListener('change', () => {
+          if (input.checked) applyInputMode(mode, true);
+        });
+        const span = document.createElement('span');
+        span.className = 'settings-mode-option-label';
+        span.textContent = INPUT_MODE_LABELS[mode] || mode;
+        row.appendChild(input);
+        row.appendChild(span);
+        host.appendChild(row);
+      }
+    }
+
+    function syncSettingsInputRadios() {
+      const host = $('settings-input-mode-options');
+      if (!host) return;
+      const inputs = host.querySelectorAll('input[type="radio"][name="settings-input-mode"]');
+      const m = state.activeInputMode;
+      for (let i = 0; i < inputs.length; i++) {
+        inputs[i].checked = inputs[i].value === m;
+      }
+    }
+
     async function openVisionWebcamModal() {
+      closeSettingsModal();
       if (state.busy || !state.sessionId) return;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         $('round-result').className = 'round-result';
@@ -1812,35 +1990,6 @@
       } catch (_) {}
     }
 
-    function rebuildInputModeTabs() {
-      const sw = $('input-mode-switcher');
-      if (!sw) return;
-      sw.replaceChildren();
-      const enabled = state.enabledInputModes || ['buttons'];
-      if (enabled.length < 2) {
-        sw.setAttribute('hidden', '');
-        return;
-      }
-      sw.removeAttribute('hidden');
-      for (let i = 0; i < enabled.length; i++) {
-        const mode = enabled[i];
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'input-mode-tab';
-        btn.setAttribute('role', 'tab');
-        btn.id = 'input-tab-' + mode;
-        btn.dataset.mode = mode;
-        const panelId = INPUT_MODE_PANELS[mode];
-        if (panelId) btn.setAttribute('aria-controls', panelId);
-        btn.textContent = INPUT_MODE_LABELS[mode] || mode;
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          applyInputMode(mode, true);
-        });
-        sw.appendChild(btn);
-      }
-    }
-
     function applyInputMode(mode, persistToStorage) {
       const enabled = state.enabledInputModes || ['buttons'];
       if (!enabled.length) return;
@@ -1860,17 +2009,7 @@
       }
       if (pv) pv.hidden = m !== 'vision';
       if (pa) pa.hidden = m !== 'audio';
-      const switcher = $('input-mode-switcher');
-      if (switcher && !switcher.hasAttribute('hidden')) {
-        const tabs = switcher.querySelectorAll('.input-mode-tab');
-        for (let i = 0; i < tabs.length; i++) {
-          const btn = tabs[i];
-          const on = btn.dataset.mode === m;
-          btn.setAttribute('aria-selected', on ? 'true' : 'false');
-          btn.classList.toggle('is-active', on);
-          btn.tabIndex = on ? 0 : -1;
-        }
-      }
+      syncSettingsInputRadios();
       lockGamePanelLayout();
     }
 
@@ -1973,7 +2112,7 @@
         if (hintA) hintA.textContent = aHint;
 
         if (section) section.style.display = 'block';
-        rebuildInputModeTabs();
+        rebuildSettingsInputModeOptions();
         applyInputMode(resolveActiveInputMode(), false);
         syncVisionAudioButtonDisabled();
       } catch (_) {
@@ -1985,7 +2124,7 @@
         if (hintV) hintV.textContent = '';
         if (hintA) hintA.textContent = '';
         if (section) section.style.display = 'block';
-        rebuildInputModeTabs();
+        rebuildSettingsInputModeOptions();
         applyInputMode('buttons', false);
         syncVisionAudioButtonDisabled();
       }
@@ -2015,6 +2154,7 @@
     function showLogin() {
       unlockGamePanelLayout();
       closeVisionWebcamModal();
+      closeSettingsModal();
       clearMatchPlayGalleries();
       $('view-game').classList.remove('active');
       $('view-login').classList.add('active');
@@ -2113,7 +2253,6 @@
         '<div class="match-end-summary" role="status">' +
         '<span class="match-end-line">' + line + '</span>' +
         '<span class="match-end-score">Final · You ' + py + ' — House ' + ps + '</span>' +
-        '<span class="match-end-hint">Use <strong>New match</strong> when you want to continue.</span>' +
         '</div>'
       );
     }
@@ -2267,6 +2406,11 @@
     });
 
     $('btn-new-match').addEventListener('click', () => { onNewMatch(); });
+
+    $('btn-settings-login').addEventListener('click', () => openSettingsModal());
+    $('btn-settings-game').addEventListener('click', () => openSettingsModal());
+    $('settings-done').addEventListener('click', () => closeSettingsModal());
+    $('settings-backdrop').addEventListener('click', () => closeSettingsModal());
   </script>
 </body>
 </html>
