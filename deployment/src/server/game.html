@@ -261,11 +261,91 @@
     .user-stats .hl-l { color: var(--lose); font-weight: 600; }
     .user-stats .hl-d { color: var(--draw); font-weight: 600; }
 
+    .game-input-section {
+      margin-bottom: 1.25rem;
+    }
+
+    .input-mode-switcher {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      gap: 0.3rem;
+      margin-bottom: 0.7rem;
+      padding: 0.25rem;
+      background: rgba(0, 0, 0, 0.22);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .input-mode-switcher[hidden] {
+      display: none !important;
+    }
+
+    .input-mode-tab {
+      flex: 1;
+      min-width: 0;
+      min-height: 40px;
+      padding: 0.4rem 0.35rem;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+    }
+
+    .input-mode-tab.is-active {
+      color: var(--text);
+      background: rgba(124, 92, 255, 0.28);
+      box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.35);
+    }
+
+    .input-mode-tab:focus-visible {
+      outline: 2px solid var(--accent2);
+      outline-offset: 2px;
+    }
+
+    .input-panel[hidden] {
+      display: none !important;
+    }
+
+    .vision-panel-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+    }
+
+    .vision-panel-actions .btn-alt {
+      flex: 1 1 calc(50% - 0.275rem);
+      min-width: 5.25rem;
+    }
+
+    .audio-panel-actions .btn-alt {
+      width: 100%;
+    }
+
+    .input-panel-hint {
+      font-size: 0.62rem;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 0.45rem;
+      line-height: 1.35;
+    }
+
     .tiles {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 0.85rem;
-      margin-bottom: 1.25rem;
+      margin-bottom: 0;
     }
 
     .tile {
@@ -471,43 +551,6 @@
       border: 0;
     }
 
-    .alt-inputs {
-      margin-bottom: 0.95rem;
-    }
-
-    .alt-inputs-label {
-      font-size: 0.65rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      text-align: center;
-      margin-bottom: 0.45rem;
-    }
-
-    .alt-inputs-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.55rem;
-    }
-
-    .alt-inputs-row .btn-alt {
-      flex: 1 1 calc(50% - 0.275rem);
-      min-width: 5.25rem;
-    }
-
-    .alt-inputs-row:not(.has-vision) .btn-audio {
-      flex: 1 1 100%;
-    }
-
-    .alt-inputs-row.has-both-modes .btn-audio {
-      flex: 1 1 100%;
-    }
-
-    .vision-group {
-      display: contents;
-    }
-
     .btn-alt {
       min-height: 48px;
       padding: 0.55rem 0.65rem;
@@ -534,14 +577,6 @@
 
     .btn-alt:not(:disabled):active {
       transform: scale(0.98);
-    }
-
-    .alt-inputs-hint {
-      font-size: 0.62rem;
-      color: var(--muted);
-      text-align: center;
-      margin-top: 0.4rem;
-      line-height: 1.35;
     }
 
     .view { display: none; }
@@ -616,10 +651,19 @@
         margin-bottom: 0.85rem;
       }
 
+      .game-input-section {
+        margin-bottom: 0.95rem;
+      }
+
+      .input-mode-tab {
+        font-size: 0.65rem;
+        min-height: 38px;
+        padding: 0.35rem 0.25rem;
+      }
+
       .tiles {
         grid-template-columns: 1fr 1fr;
         gap: 0.6rem;
-        margin-bottom: 0.95rem;
       }
 
       .tile {
@@ -795,36 +839,42 @@
 
         <p class="user-stats" id="user-stats" role="status" aria-live="polite"></p>
 
-        <div class="tiles">
-          <button type="button" class="tile tile-rock" data-move="rock" aria-label="Rock">
-            <span class="emoji" aria-hidden="true">🪨</span>
-            <span class="label">Rock</span>
-          </button>
-          <button type="button" class="tile tile-paper" data-move="paper" aria-label="Paper">
-            <span class="emoji" aria-hidden="true">📄</span>
-            <span class="label">Paper</span>
-          </button>
-          <button type="button" class="tile tile-scissors" data-move="scissors" aria-label="Scissors">
-            <span class="emoji" aria-hidden="true">✂️</span>
-            <span class="label">Scissors</span>
-          </button>
-          <button type="button" class="tile tile-none" data-move="none" aria-label="None (random)">
-            <span class="emoji" aria-hidden="true">✨</span>
-            <span class="label">None</span>
-          </button>
-        </div>
-
-        <div id="alt-inputs" class="alt-inputs" style="display: none;" aria-label="Photo, webcam, and voice input">
-          <p class="alt-inputs-label">Also play with</p>
-          <div class="alt-inputs-row" id="alt-inputs-row">
-            <div class="vision-group" id="vision-group" style="display: none;">
-              <button type="button" class="btn-alt" id="btn-vision-file" style="display: none;" disabled aria-label="Choose image file">📁 File</button>
-              <button type="button" class="btn-alt" id="btn-vision-live" style="display: none;" disabled aria-label="Use live webcam">📹 Live</button>
+        <div id="game-input-section" class="game-input-section" style="display: none;" aria-label="Choose how to play your move">
+          <div id="input-mode-switcher" class="input-mode-switcher" role="tablist" aria-label="Input mode" hidden></div>
+          <div id="panel-buttons" class="input-panel" role="tabpanel" aria-label="Text: rock, paper, scissors, none">
+            <div class="tiles">
+              <button type="button" class="tile tile-rock" data-move="rock" aria-label="Rock">
+                <span class="emoji" aria-hidden="true">🪨</span>
+                <span class="label">Rock</span>
+              </button>
+              <button type="button" class="tile tile-paper" data-move="paper" aria-label="Paper">
+                <span class="emoji" aria-hidden="true">📄</span>
+                <span class="label">Paper</span>
+              </button>
+              <button type="button" class="tile tile-scissors" data-move="scissors" aria-label="Scissors">
+                <span class="emoji" aria-hidden="true">✂️</span>
+                <span class="label">Scissors</span>
+              </button>
+              <button type="button" class="tile tile-none" data-move="none" aria-label="None (random)">
+                <span class="emoji" aria-hidden="true">✨</span>
+                <span class="label">None</span>
+              </button>
+            </div>
+          </div>
+          <div id="panel-vision" class="input-panel" role="tabpanel" hidden aria-label="Vision: file or webcam">
+            <div class="vision-panel-actions">
+              <button type="button" class="btn-alt" id="btn-vision-file" disabled aria-label="Choose image file">📁 File</button>
+              <button type="button" class="btn-alt" id="btn-vision-live" disabled aria-label="Use live webcam">📹 Live</button>
             </div>
             <input type="file" id="vision-file-input" accept="image/*" capture="environment" class="sr-only" tabindex="-1" title="Choose image" />
-            <button type="button" class="btn-alt btn-audio" id="btn-audio" style="display: none;" disabled aria-label="Speak your move">🎤 Speak</button>
+            <p class="input-panel-hint" id="vision-panel-hint"></p>
           </div>
-          <p class="alt-inputs-hint" id="alt-inputs-hint"></p>
+          <div id="panel-audio" class="input-panel" role="tabpanel" hidden aria-label="Audio: speak your move">
+            <div class="audio-panel-actions">
+              <button type="button" class="btn-alt" id="btn-audio" disabled aria-label="Speak your move">🎤 Speak</button>
+            </div>
+            <p class="input-panel-hint" id="audio-panel-hint"></p>
+          </div>
         </div>
 
         <div class="round-result-block" id="round-result-block">
@@ -854,6 +904,10 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
+    const INPUT_MODE_STORAGE_KEY = 'rps-input-mode';
+    const INPUT_MODE_LABELS = { buttons: 'Text', vision: 'Vision', audio: 'Audio' };
+    const INPUT_MODE_PANELS = { buttons: 'panel-buttons', vision: 'panel-vision', audio: 'panel-audio' };
+
     const state = {
       authHeader: null,
       username: '',
@@ -864,6 +918,11 @@
       ml: { visionSession: null, visionVersion: null },
       visionWebcamStream: null,
       visionGallery: [],
+      enabledInputModes: ['buttons'],
+      activeInputMode: 'buttons',
+      canVisionFile: false,
+      canVisionLive: false,
+      canAudio: false,
     };
 
     function basicAuthHeader(user, pass) {
@@ -1226,82 +1285,181 @@
       } catch (_) {}
     }
 
+    function rebuildInputModeTabs() {
+      const sw = $('input-mode-switcher');
+      if (!sw) return;
+      sw.replaceChildren();
+      const enabled = state.enabledInputModes || ['buttons'];
+      if (enabled.length < 2) {
+        sw.setAttribute('hidden', '');
+        return;
+      }
+      sw.removeAttribute('hidden');
+      for (let i = 0; i < enabled.length; i++) {
+        const mode = enabled[i];
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'input-mode-tab';
+        btn.setAttribute('role', 'tab');
+        btn.id = 'input-tab-' + mode;
+        btn.dataset.mode = mode;
+        const panelId = INPUT_MODE_PANELS[mode];
+        if (panelId) btn.setAttribute('aria-controls', panelId);
+        btn.textContent = INPUT_MODE_LABELS[mode] || mode;
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          applyInputMode(mode, true);
+        });
+        sw.appendChild(btn);
+      }
+    }
+
+    function applyInputMode(mode, persistToStorage) {
+      const enabled = state.enabledInputModes || ['buttons'];
+      if (!enabled.length) return;
+      let m = mode;
+      if (enabled.indexOf(m) < 0) m = enabled[0];
+      state.activeInputMode = m;
+      if (persistToStorage) {
+        try {
+          localStorage.setItem(INPUT_MODE_STORAGE_KEY, m);
+        } catch (_) {}
+      }
+      const pb = $('panel-buttons');
+      const pv = $('panel-vision');
+      const pa = $('panel-audio');
+      if (pb) {
+        pb.hidden = m !== 'buttons';
+      }
+      if (pv) pv.hidden = m !== 'vision';
+      if (pa) pa.hidden = m !== 'audio';
+      const switcher = $('input-mode-switcher');
+      if (switcher && !switcher.hasAttribute('hidden')) {
+        const tabs = switcher.querySelectorAll('.input-mode-tab');
+        for (let i = 0; i < tabs.length; i++) {
+          const btn = tabs[i];
+          const on = btn.dataset.mode === m;
+          btn.setAttribute('aria-selected', on ? 'true' : 'false');
+          btn.classList.toggle('is-active', on);
+          btn.tabIndex = on ? 0 : -1;
+        }
+      }
+    }
+
+    function resolveActiveInputMode() {
+      const enabled = state.enabledInputModes || ['buttons'];
+      let mode = state.activeInputMode;
+      if (enabled.indexOf(mode) >= 0) return mode;
+      let stored = null;
+      try {
+        stored = localStorage.getItem(INPUT_MODE_STORAGE_KEY);
+      } catch (_) {}
+      if (stored && enabled.indexOf(stored) >= 0) return stored;
+      return enabled[0];
+    }
+
+    function syncVisionAudioButtonDisabled() {
+      const b = state.busy;
+      const vf = $('btn-vision-file');
+      const vl = $('btn-vision-live');
+      const ba = $('btn-audio');
+      if (vf) vf.disabled = b || !state.canVisionFile;
+      if (vl) vl.disabled = b || !state.canVisionLive;
+      if (ba) ba.disabled = b || !state.canAudio;
+    }
+
     async function refreshMlManifest() {
-      const wrap = $('alt-inputs');
-      const row = $('alt-inputs-row');
-      const hint = $('alt-inputs-hint');
-      const visionGroup = $('vision-group');
-      const btnVF = $('btn-vision-file');
-      const btnVL = $('btn-vision-live');
-      const btnA = $('btn-audio');
+      const section = $('game-input-section');
+      const hintV = $('vision-panel-hint');
+      const hintA = $('audio-panel-hint');
       if (!state.authHeader) {
-        wrap.style.display = 'none';
+        if (section) section.style.display = 'none';
         return;
       }
       try {
         const b = await api('/me/ml/manifest', { method: 'GET' });
         state.mlBundle = b;
         const modes = b.input_modes || ['buttons'];
-        const wantVision = modes.indexOf('vision') >= 0;
-        const wantAudio = modes.indexOf('audio') >= 0;
-        const show = wantVision || wantAudio;
-        wrap.style.display = show ? 'block' : 'none';
-        if (!show) return;
+        const enabled = [];
+        if (modes.indexOf('buttons') >= 0) enabled.push('buttons');
+        if (modes.indexOf('vision') >= 0) enabled.push('vision');
+        if (modes.indexOf('audio') >= 0) enabled.push('audio');
+        if (!enabled.length) enabled.push('buttons');
+        state.enabledInputModes = enabled;
 
+        const wantVision = enabled.indexOf('vision') >= 0;
+        const wantAudio = enabled.indexOf('audio') >= 0;
         let vHint = '';
         const gum = typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
-        if (wantVision) {
-          visionGroup.style.display = 'contents';
-          btnVF.style.display = 'flex';
-          btnVL.style.display = 'flex';
-          const v = b.vision;
-          if (v && v.available) {
-            btnVF.disabled = false;
-            btnVL.disabled = !gum;
-            btnVF.title = 'Choose an image file';
-            btnVL.title = gum ? 'Use live webcam (laptop or phone)' : 'Camera API not available in this browser';
-          } else {
-            btnVF.disabled = true;
-            btnVL.disabled = true;
-            btnVF.title = 'Add ml_artifacts/vision/model.onnx on the server';
-            btnVL.title = btnVF.title;
-            vHint = 'Vision: deploy ONNX on the server to enable photo mode.';
+        const v = b.vision;
+        if (wantVision && v && v.available) {
+          state.canVisionFile = true;
+          state.canVisionLive = !!gum;
+          if ($('btn-vision-file')) $('btn-vision-file').title = 'Choose an image file';
+          if ($('btn-vision-live')) {
+            $('btn-vision-live').title = gum
+              ? 'Use live webcam (laptop or phone)'
+              : 'Camera API not available in this browser';
           }
         } else {
-          visionGroup.style.display = 'none';
+          state.canVisionFile = false;
+          state.canVisionLive = false;
+          if (wantVision) {
+            vHint = 'Vision: deploy ONNX on the server to enable photo mode.';
+          }
+          const vf = $('btn-vision-file');
+          const vl = $('btn-vision-live');
+          const t = 'Add ml_artifacts/vision/model.onnx on the server';
+          if (vf) vf.title = wantVision ? t : '';
+          if (vl) vl.title = wantVision ? t : '';
         }
 
         let aHint = '';
         if (wantAudio) {
-          btnA.style.display = 'flex';
           const a = b.audio;
           const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
           const stt = a && a.browser_speech && a.browser_speech.enabled && SR;
           const onnxA = a && a.onnx && a.onnx.available;
           if (stt) {
-            btnA.disabled = false;
-            btnA.title = 'Speak: rock, paper, scissors, or none';
-          } else if (onnxA) {
-            btnA.disabled = true;
-            btnA.title = 'Audio ONNX UI not enabled in this client build; use browser speech in manifest.';
-            aHint = 'Audio: enable browser speech in ml_artifacts/audio/manifest.json or use speech-capable browser.';
+            state.canAudio = true;
+            if ($('btn-audio')) $('btn-audio').title = 'Speak: rock, paper, scissors, or none';
           } else {
-            btnA.disabled = true;
-            btnA.title = 'Speech not available';
-            aHint = 'Audio: use a browser with Web Speech API or deploy models.';
+            state.canAudio = false;
+            if (onnxA) {
+              if ($('btn-audio')) {
+                $('btn-audio').title =
+                  'Audio ONNX UI not enabled in this client build; use browser speech in manifest.';
+              }
+              aHint =
+                'Audio: enable browser speech in ml_artifacts/audio/manifest.json or use speech-capable browser.';
+            } else {
+              if ($('btn-audio')) $('btn-audio').title = 'Speech not available';
+              aHint = 'Audio: use a browser with Web Speech API or deploy models.';
+            }
           }
         } else {
-          btnA.style.display = 'none';
+          state.canAudio = false;
         }
 
-        const parts = [vHint, aHint].filter(Boolean);
-        hint.textContent = parts.join(' ');
+        if (hintV) hintV.textContent = vHint;
+        if (hintA) hintA.textContent = aHint;
 
-        row.classList.toggle('has-vision', wantVision);
-        row.classList.toggle('has-both-modes', wantVision && wantAudio);
+        if (section) section.style.display = 'block';
+        rebuildInputModeTabs();
+        applyInputMode(resolveActiveInputMode(), false);
+        syncVisionAudioButtonDisabled();
       } catch (_) {
-        wrap.style.display = 'none';
         state.mlBundle = null;
+        state.enabledInputModes = ['buttons'];
+        state.canVisionFile = false;
+        state.canVisionLive = false;
+        state.canAudio = false;
+        if (hintV) hintV.textContent = '';
+        if (hintA) hintA.textContent = '';
+        if (section) section.style.display = 'block';
+        rebuildInputModeTabs();
+        applyInputMode('buttons', false);
+        syncVisionAudioButtonDisabled();
       }
     }
 
@@ -1316,8 +1474,9 @@
     }
 
     function setTilesDisabled(disabled) {
-      document.querySelectorAll('.tile').forEach((t) => { t.disabled = disabled; });
       state.busy = disabled;
+      document.querySelectorAll('.tile').forEach((t) => { t.disabled = disabled; });
+      syncVisionAudioButtonDisabled();
     }
 
     function showGame() {
@@ -1332,8 +1491,8 @@
       $('view-login').classList.add('active');
       state.sessionId = null;
       resetMlClientState();
-      const alt = $('alt-inputs');
-      if (alt) alt.style.display = 'none';
+      const gis = $('game-input-section');
+      if (gis) gis.style.display = 'none';
       const st = $('user-stats');
       st.textContent = '';
       st.classList.remove('visible');
