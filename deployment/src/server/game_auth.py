@@ -46,9 +46,7 @@ def verify_game_user(credentials: HTTPBasicCredentials = Depends(_security)) -> 
     username = (credentials.username or "").strip()
     password = credentials.password or ""
     if not username or users.get(username) != password:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid username or password",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+        # Do not send WWW-Authenticate: browsers show a native Basic Auth dialog on 401+Basic
+        # when the page used fetch() with Authorization — the game UI handles errors in-page.
+        raise HTTPException(status_code=401, detail="Invalid username or password")
     return username
