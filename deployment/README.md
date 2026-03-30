@@ -34,7 +34,7 @@ Flow in short:
         game.py                  # Rules and random server move
         classifier.py            # Stub classifier for API `image` string field
         game.html                # Web SPA at /game
-        ml_artifacts/            # Optional: vision (and audio) ONNX + manifest.json
+        ml_artifacts/            # Optional: vision/, vision_b/ (A/B), audio/ ONNX + manifest.json
 
     src/client/
         client.py                # CLI client
@@ -60,9 +60,32 @@ Sibling of this folder (repo root):
 
 ## Vision model (training and deploy)
 
-Train a browser-compatible ONNX classifier from a labeled CSV and image folder, then deploy into `src/server/ml_artifacts/vision/`. The tooling lives in **`../train/`** (sibling of `deployment/`). Pass a **JSON config** path to `train_export.py` and `deploy_model.py` (see `../train/train_config.example.json` and `../train/deploy_config.example.json`). Details in **`../train/README.md`**.
+Train a browser-compatible ONNX classifier from a labeled CSV and image folder, then deploy into `src/server/ml_artifacts/vision/`. The tooling lives in **`../train/`** (sibling of `deployment/`). Pass a **JSON config** path to `train_export.py` and `deploy_model.py` (see `../train/train_config.example.json` and `../train/deploy_config.example.json`). Details in **`../train/README.md`**. For an A/B variant, deploy a second model (or copy) into **`ml_artifacts/vision_b/`** with the same layout (`model.onnx` and optional `manifest.json`).
 
 Optional **`server_config.json`** keys **`vision_input_size`** (square) or **`vision_input_width`** / **`vision_input_height`** set default manifest dimensions when no `manifest.json` is present yet. Deployed **`ml_artifacts/vision/manifest.json`** overrides those for the live model.
+
+### Vision A/B experiment (optional)
+
+You can run two browser-side vision models side by side:
+
+| Slot | Directory | Role |
+| --- | --- | --- |
+| **A** (default) | `src/server/ml_artifacts/vision/` | Primary model (`model.onnx`, optional `manifest.json`). |
+| **B** (experiment) | `src/server/ml_artifacts/vision_b/` | Second model; only used if **`vision_b/model.onnx`** exists on disk. |
+
+**Behavior**
+
+- If **`vision_b/model.onnx`** is missing, every user gets slot **A** (same as a single-model setup). No per-user assignment is written for new users until **B** is deployed.
+- When **B** exists, the server assigns each **authenticated game user** a sticky slot **A** or **B** and reuses it on later visits. Assignment uses a **stable hash** of the username (`SHA256(user_id)`), not per-request randomness.
+- **Rollout:** In the admin UI (**Settings** → *Vision A/B rollout (% to B)*) or via **`PUT /admin/cfg`** field **`vision_ab_rollout_percent`** (integer **0–100**), you control what fraction of **newly assigned** users (those without a row in `user_vision_state` yet) land in **B**. Existing users keep their stored slot when you change the percentage.
+  - **0** → all new assignments are **A**.
+  - **100** → all new assignments are **B**.
+  - Values in between → approximately that percentage of new user IDs hash into **B** (deterministic per username).
+- **`GET /me/ml/manifest`** returns the vision bundle for the caller’s slot. The JSON includes **`vision_model_slot`** (`"a"` or `"b"`) so clients can tell which arm they received. Vision model download (`GET /me/ml/models/vision`) serves the matching file; the IndexedDB key still uses manifest **`version`** + **`sha256`**, so **A** and **B** cache separately when their hashes differ.
+
+**Session reporting**
+
+- Each **`POST /sessions`** stores **`vision_model_slot`** on the session row: **the effective model used for that session** (`b` only if slot B was assigned **and** the B ONNX file was present at session creation). Admin **Dashboard → Active sessions** shows a **Vision** column (**A** / **B**). Older sessions created before this feature may show an empty value.
 
 ------------------------------------------------------------------------
 
@@ -272,6 +295,10 @@ After five rounds:
 The admin UI (`/admin`) and all admin APIs (`/admin/cfg`, `/admin/monitor/*`) are
 protected with **HTTP Basic Auth**. Credentials are read from a config file.
 
+**Configuration** (`GET` / `PUT /admin/cfg`) includes **`vision_ab_rollout_percent`** (0–100) for the vision A/B experiment when `ml_artifacts/vision_b/model.onnx` exists. The dashboard summarizes this value next to other server settings.
+
+**Monitoring** (`GET /admin/monitor/sessions`) returns each session’s **`vision_model_slot`** for correlating outcomes with model arm A vs B.
+
 1. Copy the example config and set a password:
    ```bash
    cd deployment/src/server
@@ -295,6 +322,14 @@ default the database is **in-memory** (`:memory:`), so data is lost when the
 server stops. To persist state, create `src/server/server_config.json` from
 `src/server/server_config.json.example` and set **`db_path`** to a file path
 (e.g. `"state.db"`). The server reads this file at startup.
+
+Relevant tables and columns (created or migrated on startup):
+
+- **`config`** — includes **`vision_ab_rollout_percent`** (default `0`) for vision A/B rollout.
+- **`sessions`** — includes **`vision_model_slot`** (`a` / `b` / `NULL` for legacy rows): effective vision arm when the session was created.
+- **`user_vision_state`** — one row per game user: sticky **`vision_slot`** (`a` or `b`) and **`updated_at`**, used when `vision_b` is deployed.
+
+If **`db_path`** points to a file, sticky assignments and session-level model labels survive restarts; in-memory mode resets them when the process exits.
 
 ------------------------------------------------------------------------
 
