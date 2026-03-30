@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 ARTIFACTS_ROOT = Path(__file__).parent / "ml_artifacts"
 VISION_DIR = ARTIFACTS_ROOT / "vision"
+VISION_B_DIR = ARTIFACTS_ROOT / "vision_b"
 AUDIO_DIR = ARTIFACTS_ROOT / "audio"
 
 # Pin ORT Web so client wasm matches loaded script (bump together when upgrading).
@@ -85,9 +86,13 @@ def _merge_input(side: dict[str, Any]) -> dict[str, Any]:
     return inp
 
 
-def build_vision_manifest() -> dict[str, Any]:
-    side = _load_sidecar(VISION_DIR)
-    model_path = VISION_DIR / "model.onnx"
+def vision_b_has_model() -> bool:
+    return (VISION_B_DIR / "model.onnx").is_file()
+
+
+def _build_vision_manifest_at(vision_root: Path) -> dict[str, Any]:
+    side = _load_sidecar(vision_root)
+    model_path = vision_root / "model.onnx"
     labels = side.get("labels")
     if not isinstance(labels, list) or not labels:
         labels = list(DEFAULT_LABELS)
@@ -122,6 +127,20 @@ def build_vision_manifest() -> dict[str, Any]:
             }
         )
     return out
+
+
+def build_vision_manifest_slot(slot: str) -> dict[str, Any]:
+    """
+    slot 'a' -> ml_artifacts/vision (default).
+    slot 'b' -> ml_artifacts/vision_b (A/B experiment).
+    """
+    root = VISION_B_DIR if slot == "b" else VISION_DIR
+    return _build_vision_manifest_at(root)
+
+
+def build_vision_manifest() -> dict[str, Any]:
+    """Default primary vision bundle (slot a)."""
+    return build_vision_manifest_slot("a")
 
 
 def build_audio_manifest() -> dict[str, Any]:
@@ -170,10 +189,12 @@ def build_audio_manifest() -> dict[str, Any]:
     return out
 
 
-def build_ml_bundle(input_modes: list[str]) -> dict[str, Any]:
+def build_ml_bundle(input_modes: list[str], vision_slot: str = "a") -> dict[str, Any]:
+    slot = "b" if vision_slot == "b" and vision_b_has_model() else "a"
     return {
         "input_modes": list(input_modes),
-        "vision": build_vision_manifest(),
+        "vision": build_vision_manifest_slot(slot),
+        "vision_model_slot": slot,
         "audio": build_audio_manifest(),
         "onnx_runtime_web": {
             "version": ONNX_RUNTIME_WEB_VERSION,
@@ -183,9 +204,10 @@ def build_ml_bundle(input_modes: list[str]) -> dict[str, Any]:
     }
 
 
-def model_file_for_kind(kind: str) -> Optional[Path]:
+def model_file_for_kind(kind: str, vision_slot: str = "a") -> Optional[Path]:
     if kind == "vision":
-        p = VISION_DIR / "model.onnx"
+        root = VISION_B_DIR if vision_slot == "b" and vision_b_has_model() else VISION_DIR
+        p = root / "model.onnx"
         return p if p.is_file() else None
     if kind == "audio":
         p = AUDIO_DIR / "model.onnx"

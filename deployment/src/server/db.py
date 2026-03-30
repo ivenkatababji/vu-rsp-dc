@@ -57,6 +57,13 @@ def init_db(path: Optional[str] = None) -> None:
             conn.commit()
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute(
+                "ALTER TABLE config ADD COLUMN vision_ab_rollout_percent INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
         conn.executescript("""
 
         CREATE TABLE IF NOT EXISTS game_stats (
@@ -83,6 +90,18 @@ def init_db(path: Optional[str] = None) -> None:
             round_history TEXT NOT NULL DEFAULT '[]'
         );
         """)
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN vision_model_slot TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+        conn.executescript("""
+        CREATE TABLE IF NOT EXISTS user_vision_state (
+            user_id TEXT PRIMARY KEY,
+            vision_slot TEXT NOT NULL,
+            updated_at REAL NOT NULL
+        );
+        """)
         conn.commit()
 
 
@@ -105,17 +124,23 @@ def get_config() -> dict[str, Any]:
         conn = get_conn()
         try:
             row = conn.execute(
-                "SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds, input_modes_json FROM config WHERE id = 1"
+                """SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds,
+                          input_modes_json, vision_ab_rollout_percent FROM config WHERE id = 1"""
             ).fetchone()
         except sqlite3.OperationalError:
             try:
                 row = conn.execute(
-                    "SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds FROM config WHERE id = 1"
+                    "SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds, input_modes_json FROM config WHERE id = 1"
                 ).fetchone()
             except sqlite3.OperationalError:
-                row = conn.execute(
-                    "SELECT max_rounds, max_sessions, session_timeout_seconds FROM config WHERE id = 1"
-                ).fetchone()
+                try:
+                    row = conn.execute(
+                        "SELECT max_rounds, max_sessions, session_timeout_seconds, retention_seconds FROM config WHERE id = 1"
+                    ).fetchone()
+                except sqlite3.OperationalError:
+                    row = conn.execute(
+                        "SELECT max_rounds, max_sessions, session_timeout_seconds FROM config WHERE id = 1"
+                    ).fetchone()
         if not row:
             return {
                 "max_rounds": 5,
@@ -123,6 +148,7 @@ def get_config() -> dict[str, Any]:
                 "session_timeout_seconds": 0,
                 "retention_seconds": 604800,
                 "input_modes": ["buttons"],
+                "vision_ab_rollout_percent": 0,
             }
         out = {
             "max_rounds": row["max_rounds"],
@@ -137,6 +163,10 @@ def get_config() -> dict[str, Any]:
             out["input_modes"] = _parse_input_modes(row["input_modes_json"])
         except (KeyError, IndexError):
             out["input_modes"] = ["buttons"]
+        try:
+            out["vision_ab_rollout_percent"] = int(row["vision_ab_rollout_percent"] or 0)
+        except (KeyError, IndexError):
+            out["vision_ab_rollout_percent"] = 0
         return out
 
 
@@ -146,6 +176,7 @@ def set_config(
     session_timeout_seconds: Optional[int] = None,
     retention_seconds: Optional[int] = None,
     input_modes: Optional[list[str]] = None,
+    vision_ab_rollout_percent: Optional[int] = None,
 ) -> None:
     conn = get_conn()
     updates = []
@@ -165,6 +196,9 @@ def set_config(
     if input_modes is not None:
         updates.append("input_modes_json = ?")
         params.append(json.dumps(input_modes))
+    if vision_ab_rollout_percent is not None:
+        updates.append("vision_ab_rollout_percent = ?")
+        params.append(vision_ab_rollout_percent)
     if updates:
         params.append(1)
         with _lock:
@@ -174,6 +208,10 @@ def set_config(
 
 
 def _row_to_session(row: sqlite3.Row) -> dict[str, Any]:
+    keys = row.keys()
+    vms = None
+    if "vision_model_slot" in keys and row["vision_model_slot"] is not None:
+        vms = str(row["vision_model_slot"])
     return {
         "user_id": row["user_id"],
         "max_rounds": row["max_rounds"],
@@ -184,6 +222,7 @@ def _row_to_session(row: sqlite3.Row) -> dict[str, Any]:
         "created_at": row["created_at"],
         "last_activity_at": row["last_activity_at"],
         "round_history": json.loads(row["round_history"] or "[]"),
+        "vision_model_slot": vms,
     }
 
 
@@ -207,19 +246,45 @@ def list_sessions() -> list[tuple[str, dict[str, Any]]]:
         return [(row["session_id"], _row_to_session(row)) for row in rows]
 
 
+def get_user_vision_slot(user_id: str) -> Optional[str]:
+    with _lock:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT vision_slot FROM user_vision_state WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    return str(row["vision_slot"]) if row else None
+
+
+def set_user_vision_slot(user_id: str, slot: str) -> None:
+    now = time.time()
+    with _lock:
+        conn = get_conn()
+        conn.execute(
+            """INSERT INTO user_vision_state (user_id, vision_slot, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                 vision_slot = excluded.vision_slot,
+                 updated_at = excluded.updated_at""",
+            (user_id, slot, now),
+        )
+        conn.commit()
+
+
 def create_session(
     session_id: str,
     user_id: Optional[str],
     max_rounds: int,
     created_at: float,
     last_activity_at: float,
+    vision_model_slot: Optional[str] = None,
 ) -> None:
     with _lock:
         conn = get_conn()
         conn.execute(
-            """INSERT INTO sessions (session_id, user_id, max_rounds, round_number, player_score, server_score, winner, created_at, last_activity_at, round_history)
-               VALUES (?, ?, ?, 0, 0, 0, NULL, ?, ?, '[]')""",
-            (session_id, user_id, max_rounds, created_at, last_activity_at),
+            """INSERT INTO sessions (session_id, user_id, max_rounds, round_number, player_score, server_score, winner, created_at, last_activity_at, round_history, vision_model_slot)
+               VALUES (?, ?, ?, 0, 0, 0, NULL, ?, ?, '[]', ?)""",
+            (session_id, user_id, max_rounds, created_at, last_activity_at, vision_model_slot),
         )
         conn.execute(
             "UPDATE game_stats SET total_sessions_created = total_sessions_created + 1 WHERE id = 1"

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 import uuid
@@ -124,6 +125,7 @@ class MonitorSessionSummary(BaseModel):
     created_at: float
     last_activity_at: float
     expired: bool
+    vision_model_slot: Optional[str] = None
 
 
 class GameStatsResponse(BaseModel):
@@ -148,6 +150,7 @@ class ConfigResponse(BaseModel):
     session_timeout_seconds: int
     retention_seconds: int
     input_modes: list[str]
+    vision_ab_rollout_percent: int
 
 
 class ConfigUpdateRequest(BaseModel):
@@ -156,6 +159,7 @@ class ConfigUpdateRequest(BaseModel):
     session_timeout_seconds: Optional[int] = None
     retention_seconds: Optional[int] = None
     input_modes: Optional[list[str]] = None
+    vision_ab_rollout_percent: Optional[int] = None
 
 
 class PruneRequest(BaseModel):
@@ -174,6 +178,35 @@ def _is_session_expired(state: SessionState) -> bool:
     return (time.time() - last) > timeout
 
 
+def _resolve_vision_slot(user_id: str) -> str:
+    """
+    Sticky A/B vision slot per authenticated user when ml_artifacts/vision_b/model.onnx exists.
+    New users: rollout uses config vision_ab_rollout_percent (0–100); hash(user_id) % 100 < pct → B.
+    """
+    if not ml_manifest.vision_b_has_model():
+        return "a"
+    existing = db.get_user_vision_slot(user_id)
+    if existing in ("a", "b"):
+        return existing
+    cfg = db.get_config()
+    pct = max(0, min(100, int(cfg.get("vision_ab_rollout_percent") or 0)))
+    if pct <= 0:
+        slot = "a"
+    elif pct >= 100:
+        slot = "b"
+    else:
+        bucket = int(hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:8], 16) % 100
+        slot = "b" if bucket < pct else "a"
+    db.set_user_vision_slot(user_id, slot)
+    return slot
+
+
+def _effective_vision_model_slot(user_id: str) -> str:
+    """Which vision ONNX arm is actually served (B only if deployed)."""
+    assigned = _resolve_vision_slot(user_id)
+    return "b" if assigned == "b" and ml_manifest.vision_b_has_model() else "a"
+
+
 def _get_session(session_id: str) -> SessionState:
     state = db.get_session(session_id)
     if state is None:
@@ -185,22 +218,24 @@ def _get_session(session_id: str) -> SessionState:
 
 
 @app.get("/me/ml/manifest")
-def get_ml_manifest(_username: str = Depends(verify_game_user)):
+def get_ml_manifest(username: str = Depends(verify_game_user)):
     """
     Client-side ML bundle: enabled input modes, ONNX manifests, ORT Web CDN pins.
     Vision/audio models are optional; when absent, available=false and UI falls back to buttons (and browser STT for audio if enabled).
     """
     cfg = db.get_config()
     modes = _normalize_input_modes(cfg.get("input_modes") or ["buttons"])
-    return ml_manifest.build_ml_bundle(modes)
+    slot = _resolve_vision_slot(username)
+    return ml_manifest.build_ml_bundle(modes, vision_slot=slot)
 
 
 @app.get("/me/ml/models/{kind}")
-def download_ml_model(kind: str, _username: str = Depends(verify_game_user)):
+def download_ml_model(kind: str, username: str = Depends(verify_game_user)):
     """Authenticated download of ONNX artifact (vision or audio)."""
     if kind not in ("vision", "audio"):
         raise HTTPException(status_code=404, detail="Unknown model kind")
-    path = ml_manifest.model_file_for_kind(kind)
+    slot = _resolve_vision_slot(username) if kind == "vision" else "a"
+    path = ml_manifest.model_file_for_kind(kind, vision_slot=slot)
     if path is None:
         raise HTTPException(status_code=404, detail="Model not deployed")
     return FileResponse(
@@ -240,7 +275,8 @@ def create_session(
     max_rounds = config.get("max_rounds") or 5
     now = time.time()
     session_id = str(uuid.uuid4())
-    db.create_session(session_id, username, max_rounds, now, now)
+    vision_slot = _effective_vision_model_slot(username)
+    db.create_session(session_id, username, max_rounds, now, now, vision_model_slot=vision_slot)
     return SessionResponse(session_id=session_id, user_id=username, max_rounds=max_rounds)
 
 
@@ -393,6 +429,7 @@ def admin_list_sessions(include_expired: bool = False):
                 created_at=state.get("created_at", 0),
                 last_activity_at=state.get("last_activity_at", 0),
                 expired=expired,
+                vision_model_slot=state.get("vision_model_slot"),
             )
         )
     result.sort(key=lambda x: (x.last_activity_at or 0, x.created_at or 0), reverse=True)
@@ -438,6 +475,7 @@ def admin_get_config():
         session_timeout_seconds=config.get("session_timeout_seconds", 0),
         retention_seconds=config.get("retention_seconds", 604800),
         input_modes=_normalize_input_modes(config.get("input_modes") or ["buttons"]),
+        vision_ab_rollout_percent=int(config.get("vision_ab_rollout_percent") or 0),
     )
 
 
@@ -452,6 +490,11 @@ def admin_update_config(body: ConfigUpdateRequest):
         raise HTTPException(status_code=400, detail="session_timeout_seconds cannot be negative")
     if body.retention_seconds is not None and body.retention_seconds < 0:
         raise HTTPException(status_code=400, detail="retention_seconds cannot be negative")
+    if body.vision_ab_rollout_percent is not None and not 0 <= body.vision_ab_rollout_percent <= 100:
+        raise HTTPException(
+            status_code=400,
+            detail="vision_ab_rollout_percent must be between 0 and 100",
+        )
     input_modes_norm: Optional[list[str]] = None
     if body.input_modes is not None:
         if not body.input_modes:
@@ -469,6 +512,7 @@ def admin_update_config(body: ConfigUpdateRequest):
         session_timeout_seconds=body.session_timeout_seconds,
         retention_seconds=body.retention_seconds,
         input_modes=input_modes_norm,
+        vision_ab_rollout_percent=body.vision_ab_rollout_percent,
     )
     return admin_get_config()
 
