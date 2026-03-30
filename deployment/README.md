@@ -1,46 +1,47 @@
 # Rock Paper Scissors -- ML Experiment (FastAPI)
 
-This project demonstrates a simple **machine learning inference pipeline
-simulation** using a Rock--Paper--Scissors game.
+This project demonstrates a **Rock–Paper–Scissors** game API plus a **browser
+client** that can run **on-device vision inference** (ONNX in the browser) when
+a model is deployed.
 
-The goal is to mimic a real-world ML workflow where:
+Flow in short:
 
-1.  A user provides an **image input** (stubbed as a string for now)
-2.  A **classifier model** infers the user's move
-3.  The **server generates a random move**
-4.  The system determines the **winner of the round**
-5.  After **5 rounds**, the server declares the **match winner**
-
-The ML inference stage is currently **stubbed** and can later be
-replaced with a real image classification model.
+1.  The player submits a move (**text tiles**, **vision** image, or **audio**
+    transcript, depending on server manifest and browser support).
+2.  For the **HTTP API** `POST /play`, the server still classifies a **string**
+    stub via `classifier.py` (simple heuristic / random). For **vision in the
+    web UI**, classification runs **client-side** with ONNX Runtime Web when
+    `ml_artifacts/vision/` is present.
+3.  The **server** draws a random house move and decides the round winner.
+4.  After **N rounds** (default 5), the server records the **match** outcome.
 
 ------------------------------------------------------------------------
 
-## Project Structure
-
-    rps_ml_match_experiment/
+## Project Structure (`deployment/`)
 
     requirements.txt
     README.md
 
     src/server/
-        main.py                  # FastAPI server
-        admin_auth.py            # Admin HTTP Basic Auth (credentials from config file)
-        admin_config.json        # Admin credentials (create from .example; do not commit secrets)
-        game_auth.py            # Game user auth (pre-provisioned users from config file)
-        users_config.json        # Game users username:password (optional; see Game user authentication)
-        server_config.json       # Server config (optional; db_path for SQLite file or :memory:)
-        db.py                    # SQLite state (sessions, config, game stats)
-        game.py             # Game rules and random server move
-        classifier.py       # Stub image classifier
-        game.html           # Web game SPA at /game
+        main.py                  # FastAPI app, routes, serves /game
+        ml_manifest.py           # Builds /me/ml/manifest from ml_artifacts
+        admin_auth.py            # Admin HTTP Basic Auth
+        admin_config.json        # Admin credentials (from .example; do not commit)
+        game_auth.py             # Game user verification (users_config.json)
+        users_config.json        # Game users (optional; see Game user authentication)
+        server_config.json       # Optional: db_path, vision defaults, …
+        db.py                    # SQLite: sessions, config, stats
+        game.py                  # Rules and random server move
+        classifier.py            # Stub classifier for API `image` string field
+        game.html                # Web SPA at /game
+        ml_artifacts/            # Optional: vision (and audio) ONNX + manifest.json
 
     src/client/
-        client.py        # Simple CLI client
+        client.py                # CLI client
 
     src/simulator/
-        simulator.py              # Simulator (many games; client loops POST /play)
-        simulator_config.json     # Optional: base_url + users list
+        simulator.py
+        simulator_config.json
 
 ------------------------------------------------------------------------
 
@@ -67,9 +68,9 @@ Optional **`server_config.json`** keys **`vision_input_size`** (square) or **`vi
 
 ## Installation
 
-Install the required dependencies:
+From the **`deployment/`** directory:
 
-``` bash
+```bash
 pip install -r requirements.txt
 ```
 
@@ -77,10 +78,8 @@ pip install -r requirements.txt
 
 ## Running the Server
 
-Start the FastAPI server:
-
-``` bash
-cd src/server
+```bash
+cd deployment/src/server
 uvicorn main:app --reload
 ```
 
@@ -96,11 +95,40 @@ Interactive API documentation is available at:
 
 ## Web game (browser)
 
-Open **`/game`** (e.g. `http://localhost:9000/game` if you use port 9000) for a single-page
-client: sign in with a game username/password, then use a **2×2** tile grid
-(Rock, Paper, Scissors, None). Each round shows who won; after the last round a
-match summary appears with **Play again**. Styling uses the same host as the API
-(no CORS issues).
+Open **`/game`** (e.g. `http://localhost:8000/game`) for the SPA. Sign in with a
+game username and password (HTTP Basic on API calls).
+
+- **Text:** 2×2 tiles (Rock, Paper, Scissors, None).
+- **Vision:** file upload or live webcam when the server exposes an ONNX vision
+  bundle under `ml_artifacts/vision/` and the browser loads ONNX Runtime Web
+  from the manifest (see **Client-side ONNX cache** below).
+- **Audio:** browser speech recognition when enabled in the audio manifest and
+  the browser supports Web Speech API.
+
+**Settings** (vertical ⋮ menu) appears **after** login only. It lists allowed
+**input modes** from the server manifest. The chosen mode is persisted in the
+browser as **`localStorage`** key **`rps-input-mode`** (`buttons` | `vision` |
+`audio`).
+
+Round results, optional match history thumbnails, and **New match** live in the
+same card; layout is tuned for small viewports.
+
+------------------------------------------------------------------------
+
+## Client-side ONNX cache (browser)
+
+The vision **`.onnx`** file is **not** stored in `localStorage`. After the first
+authenticated download, the game caches the model bytes in **IndexedDB**:
+
+| | |
+| --- | --- |
+| **Database** | `rps-ml-cache` (version `1`) |
+| **Object store** | `models` |
+| **Key** | `vision:<manifest_version>:<sha256>` |
+
+A cache hit skips re-downloading when the version and hash match the manifest.
+ONNX Runtime **JavaScript and WASM** are loaded from URLs in the manifest, not
+from this database.
 
 ------------------------------------------------------------------------
 
@@ -109,10 +137,15 @@ match summary appears with **Play again**. Styling uses the same host as the API
 Only **pre-provisioned users** can create sessions and play. Credentials are checked
 with **HTTP Basic Auth** against a config file.
 
-- **Default:** If `server/users_config.json` is missing, a built-in user **guest** / **guest** is allowed.
-- **Config file:** Copy `server/users_config.json.example` to `server/users_config.json` and add users as `"username": "password"` entries. The default user `guest` / `guest` can be overridden or extended there.
+- **Default:** If `src/server/users_config.json` is missing, a built-in user **guest** / **guest** is allowed.
+- **Config file:** Copy `src/server/users_config.json.example` to `src/server/users_config.json` and add users as `"username": "password"` entries. The default user `guest` / `guest` can be overridden or extended there.
 
-The client sends the chosen username and password (e.g. `python client.py guest guest` or `python client.py alice` and then the password when prompted).
+**Invalid username or password** returns **401** with a JSON `detail` message.
+The server **does not** send `WWW-Authenticate: Basic` on that failure, so the
+browser will not open a second system Basic-auth dialog on top of the in-page
+login form.
+
+The CLI sends the chosen username and password (e.g. `python client.py guest guest` or `python client.py alice` and then the password when prompted).
 
 ------------------------------------------------------------------------
 
@@ -174,7 +207,7 @@ python simulator.py --games 100
 - **`--games N`** — number of matches (default `100`).
 - **`--config path`** — JSON with optional `base_url` and optional `users` array
   `[{ "username": "...", "password": "..." }, ...]`.
-- If `users` is missing or empty, users are read from **`server/users_config.json`**
+- If `users` is missing or empty, users are read from **`src/server/users_config.json`**
   (username/password map) relative to the repo layout.
 - Each round’s “image” stub is chosen at random: **rock**, **paper**, **scissors**, or **none**
   (empty string → classifier picks a random move).
@@ -183,20 +216,23 @@ python simulator.py --games 100
 
 ## Game Flow
 
-Each round performs the following steps:
+**Web UI (vision path):** image → **browser ONNX** → label → `POST /play` with
+that move.
 
-    User Input (image stub)
-            ↓
-    Image Classification (stub)
-            ↓
-    Player Move
-            ↓
-    Server Random Move
-            ↓
-    Round Winner
+**API / CLI `POST /play`:** body still carries an **`image` string**; the server
+runs **`classifier.classify_image`** (stub / heuristic) to derive the player
+move.
 
-The match runs for **5 rounds**, after which the server determines the
-winner based on the majority score.
+Then for every round:
+
+    Player move (from client or stub classifier)
+            ↓
+    Server random move
+            ↓
+    Round winner and scores
+
+The match runs until **`max_rounds`** (default **5**), then the server records the
+match winner.
 
 ------------------------------------------------------------------------
 
@@ -237,8 +273,8 @@ The admin UI (`/admin`) and all admin APIs (`/admin/cfg`, `/admin/monitor/*`) ar
 protected with **HTTP Basic Auth**. Credentials are read from a config file.
 
 1. Copy the example config and set a password:
-   ``` bash
-   cd server
+   ```bash
+   cd deployment/src/server
    cp admin_config.json.example admin_config.json
    # Edit admin_config.json: set admin_username and admin_password
    ```
@@ -256,8 +292,8 @@ to create the file.
 
 Sessions, configuration, and game statistics are stored in **SQLite**. By
 default the database is **in-memory** (`:memory:`), so data is lost when the
-server stops. To persist state, create `server/server_config.json` from
-`server/server_config.json.example` and set **`db_path`** to a file path
+server stops. To persist state, create `src/server/server_config.json` from
+`src/server/server_config.json.example` and set **`db_path`** to a file path
 (e.g. `"state.db"`). The server reads this file at startup.
 
 ------------------------------------------------------------------------
@@ -266,15 +302,14 @@ server stops. To persist state, create `server/server_config.json` from
 
 Possible extensions include:
 
--   Replace the stub classifier with a **real image classification
-    model**
--   Accept **actual image uploads** from the client
+-   Server-side **real image** classification for `POST /play` (multipart or
+    base64) instead of the string stub
 -   Persist game results for **training data collection**
--   Deploy the inference service as a **scalable ML microservice**
+-   Deploy inference as a **scalable ML microservice** behind the same API
 
 ------------------------------------------------------------------------
 
 ## Purpose
 
-This project is intended as a **simple demonstration of integrating an
-ML inference step with a REST API service** using FastAPI.
+Demonstrate **FastAPI** session/play APIs together with a **browser client** that
+can run **exported ONNX** vision models locally and cache them for repeat visits.
