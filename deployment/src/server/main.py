@@ -54,18 +54,44 @@ SessionState = dict
 _SERVER_CONFIG_PATH = Path(__file__).parent / "server_config.json"
 
 
+def _parse_input_modes(raw: Any) -> Optional[list[str]]:
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        parts = [part.strip() for part in raw.split(",") if part.strip()]
+        return parts or None
+    if isinstance(raw, list):
+        parts = [str(part).strip() for part in raw if str(part).strip()]
+        return parts or None
+    return None
+
+
 def _load_server_config() -> dict[str, Any]:
     """Load server config from server_config.json. Missing file or key => defaults."""
+    config: dict[str, Any] = {"db_path": ":memory:"}
     if not _SERVER_CONFIG_PATH.exists():
-        return {"db_path": ":memory:"}
-    try:
-        data = json.loads(_SERVER_CONFIG_PATH.read_text(encoding="utf-8"))
-        return {
-            "db_path": data.get("db_path") or ":memory:",
-            "input_modes": data.get("input_modes"),
-        }
-    except (json.JSONDecodeError, OSError):
-        return {"db_path": ":memory:"}
+        pass
+    else:
+        try:
+            data = json.loads(_SERVER_CONFIG_PATH.read_text(encoding="utf-8"))
+            config.update(
+                {
+                    "db_path": data.get("db_path") or ":memory:",
+                    "input_modes": _parse_input_modes(data.get("input_modes")),
+                }
+            )
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    env_db_path = (os.getenv("RPS_DB_PATH") or "").strip()
+    if env_db_path:
+        config["db_path"] = env_db_path
+
+    env_input_modes = _parse_input_modes(os.getenv("RPS_INPUT_MODES"))
+    if env_input_modes:
+        config["input_modes"] = env_input_modes
+
+    return config
 
 
 @app.on_event("startup")
@@ -75,6 +101,22 @@ def startup():
     configured_modes = config.get("input_modes")
     if isinstance(configured_modes, list) and configured_modes:
         db.set_config(input_modes=_normalize_input_modes([str(mode) for mode in configured_modes]))
+
+
+@app.get("/", include_in_schema=False)
+def root_redirect():
+    return RedirectResponse(url="/game", status_code=302)
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    config = db.get_config()
+    return {
+        "status": "ok",
+        "input_modes": _normalize_input_modes(config.get("input_modes") or ["buttons"]),
+        "vision_model_available": ml_manifest.model_file_for_kind("vision") is not None,
+        "audio_model_available": ml_manifest.model_file_for_kind("audio") is not None,
+    }
 
 
 class PlayRequest(BaseModel):

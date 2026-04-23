@@ -52,6 +52,7 @@ import {
   clearApiBaseUrlOverride,
   DEFAULT_API_BASE_URL,
   getApiBaseUrl,
+  MANUAL_API_ORIGIN_ENABLED,
   setApiBaseUrlOverride,
 } from './src/config/env';
 import { NeonButton } from './src/ui/NeonButton';
@@ -301,7 +302,7 @@ function AppScreen() {
     void (async () => {
       try {
         const [savedApiBaseUrl, savedMode, savedAuth, savedSession] = await Promise.all([
-          loadApiBaseUrl(),
+          MANUAL_API_ORIGIN_ENABLED ? loadApiBaseUrl() : Promise.resolve(null),
           loadInputMode(),
           loadAuthSession(),
           loadSession(),
@@ -312,7 +313,11 @@ function AppScreen() {
         }
 
         let restoredApiBaseUrl = getApiBaseUrl();
-        if (savedApiBaseUrl) {
+        if (!MANUAL_API_ORIGIN_ENABLED) {
+          clearApiBaseUrlOverride();
+          await clearSavedApiBaseUrl();
+          restoredApiBaseUrl = getApiBaseUrl();
+        } else if (savedApiBaseUrl) {
           try {
             restoredApiBaseUrl = setApiBaseUrlOverride(savedApiBaseUrl);
           } catch {
@@ -634,6 +639,14 @@ function AppScreen() {
   };
 
   const commitApiBaseUrlDraft = async (): Promise<string | null> => {
+    if (!MANUAL_API_ORIGIN_ENABLED) {
+      const fixedBaseUrl = getApiBaseUrl();
+      setApiBaseUrl(fixedBaseUrl);
+      setApiBaseUrlDraft(fixedBaseUrl);
+      setApiBaseUrlError(null);
+      return fixedBaseUrl;
+    }
+
     try {
       const normalized = setApiBaseUrlOverride(apiBaseUrlDraft);
       const changed = normalized !== apiBaseUrl;
@@ -930,21 +943,25 @@ function AppScreen() {
             </Text>
 
             <NeonCard style={styles.loginCard} tone="accent">
-              <Text style={styles.fieldLabel}>API Origin</Text>
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                value={apiBaseUrlDraft}
-                onChangeText={(value) => {
-                  setApiBaseUrlDraft(value);
-                  setApiBaseUrlError(null);
-                }}
-                style={styles.input}
-                placeholder="https://your-backend.example.com"
-                placeholderTextColor={theme.colors.onSurfaceMuted}
-              />
-              {apiBaseUrlError ? <Text style={styles.errorInlineText}>{apiBaseUrlError}</Text> : null}
+              {MANUAL_API_ORIGIN_ENABLED ? (
+                <>
+                  <Text style={styles.fieldLabel}>API Origin</Text>
+                  <TextInput
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    value={apiBaseUrlDraft}
+                    onChangeText={(value) => {
+                      setApiBaseUrlDraft(value);
+                      setApiBaseUrlError(null);
+                    }}
+                    style={styles.input}
+                    placeholder="https://your-backend.example.com"
+                    placeholderTextColor={theme.colors.onSurfaceMuted}
+                  />
+                  {apiBaseUrlError ? <Text style={styles.errorInlineText}>{apiBaseUrlError}</Text> : null}
+                </>
+              ) : null}
 
               <Text style={styles.fieldLabel}>Access ID</Text>
               <TextInput
@@ -976,7 +993,11 @@ function AppScreen() {
                 disabled={busy}
               />
             </NeonCard>
-            <Text style={styles.loginFootnote}>Credentials are stored with SecureStore when available.</Text>
+            <Text style={styles.loginFootnote}>
+              {MANUAL_API_ORIGIN_ENABLED
+                ? 'Credentials are stored with SecureStore when available.'
+                : 'The production backend is already configured for this build.'}
+            </Text>
           </View>
         </LinearGradient>
       </SafeAreaView>
@@ -1454,40 +1475,42 @@ function AppScreen() {
 
             <NeonCard style={styles.hudCard}>
               <Text style={styles.cardTitle}>Preferences</Text>
-              <View style={styles.endpointBlock}>
-                <Text style={styles.fieldLabel}>API Origin</Text>
-                <TextInput
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                  value={apiBaseUrlDraft}
-                  onChangeText={(value) => {
-                    setApiBaseUrlDraft(value);
-                    setApiBaseUrlError(null);
-                  }}
-                  style={styles.input}
-                  placeholder="https://your-backend.example.com"
-                  placeholderTextColor={theme.colors.onSurfaceMuted}
-                />
-                {apiBaseUrlError ? <Text style={styles.errorInlineText}>{apiBaseUrlError}</Text> : null}
-                <View style={styles.endpointActions}>
-                  <NeonButton
-                    label="Save origin"
-                    icon="content-save-outline"
-                    variant="secondary"
-                    onPress={() => void commitApiBaseUrlDraft()}
-                    style={styles.endpointAction}
+              {MANUAL_API_ORIGIN_ENABLED ? (
+                <View style={styles.endpointBlock}>
+                  <Text style={styles.fieldLabel}>API Origin</Text>
+                  <TextInput
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    value={apiBaseUrlDraft}
+                    onChangeText={(value) => {
+                      setApiBaseUrlDraft(value);
+                      setApiBaseUrlError(null);
+                    }}
+                    style={styles.input}
+                    placeholder="https://your-backend.example.com"
+                    placeholderTextColor={theme.colors.onSurfaceMuted}
                   />
-                  <NeonButton
-                    label="Use default"
-                    icon="restore"
-                    variant="quiet"
-                    onPress={() => void handleResetApiBaseUrl()}
-                    disabled={apiBaseUrl === DEFAULT_API_BASE_URL && apiBaseUrlDraft === DEFAULT_API_BASE_URL}
-                    style={styles.endpointAction}
-                  />
+                  {apiBaseUrlError ? <Text style={styles.errorInlineText}>{apiBaseUrlError}</Text> : null}
+                  <View style={styles.endpointActions}>
+                    <NeonButton
+                      label="Save origin"
+                      icon="content-save-outline"
+                      variant="secondary"
+                      onPress={() => void commitApiBaseUrlDraft()}
+                      style={styles.endpointAction}
+                    />
+                    <NeonButton
+                      label="Use default"
+                      icon="restore"
+                      variant="quiet"
+                      onPress={() => void handleResetApiBaseUrl()}
+                      disabled={apiBaseUrl === DEFAULT_API_BASE_URL && apiBaseUrlDraft === DEFAULT_API_BASE_URL}
+                      style={styles.endpointAction}
+                    />
+                  </View>
                 </View>
-              </View>
+              ) : null}
               <View style={styles.settingRow}>
                 <View>
                   <Text style={styles.settingTitle}>Haptic feedback</Text>
@@ -1504,12 +1527,14 @@ function AppScreen() {
                 <Text style={styles.bodyText}>Session resume</Text>
                 <Text style={styles.bodyTextStrong}>{session ? 'armed' : 'inactive'}</Text>
               </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.bodyText}>API origin</Text>
-                <Text style={[styles.bodyTextStrong, styles.detailValue]} numberOfLines={1}>
-                  {apiBaseUrl}
-                </Text>
-              </View>
+              {MANUAL_API_ORIGIN_ENABLED ? (
+                <View style={styles.detailRow}>
+                  <Text style={styles.bodyText}>API origin</Text>
+                  <Text style={[styles.bodyTextStrong, styles.detailValue]} numberOfLines={1}>
+                    {apiBaseUrl}
+                  </Text>
+                </View>
+              ) : null}
             </NeonCard>
           </ScrollView>
         ) : null}

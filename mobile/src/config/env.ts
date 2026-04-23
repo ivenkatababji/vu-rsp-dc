@@ -16,6 +16,8 @@ function resolveExpoHostIp(): string | null {
 }
 
 const expoHostIp = resolveExpoHostIp();
+const configuredApiBaseUrl = (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').trim();
+const isDevRuntime = Boolean((globalThis as { __DEV__?: boolean }).__DEV__);
 
 const defaultBaseUrl = Platform.select({
   ios: 'http://localhost:8000',
@@ -46,8 +48,10 @@ export function normalizeApiBaseUrl(value: string): string {
 }
 
 export const DEFAULT_API_BASE_URL = normalizeApiBaseUrl(
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? defaultBaseUrl ?? 'http://localhost:8000',
+  configuredApiBaseUrl || defaultBaseUrl || 'http://localhost:8000',
 );
+
+export const MANUAL_API_ORIGIN_ENABLED = isDevRuntime || !configuredApiBaseUrl;
 
 let apiBaseUrlOverride: string | null = null;
 
@@ -68,6 +72,9 @@ export const API_BASE_URL = DEFAULT_API_BASE_URL;
 
 export function getApiFallbackBaseUrls(): string[] {
   const baseUrl = getApiBaseUrl();
+  if (!MANUAL_API_ORIGIN_ENABLED) {
+    return [baseUrl];
+  }
   return Platform.OS === 'web'
     ? Array.from(new Set([baseUrl, 'http://127.0.0.1:8000', 'http://localhost:8000']))
     : [baseUrl];

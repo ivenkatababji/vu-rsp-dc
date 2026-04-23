@@ -1,1 +1,4 @@
-uvicorn main:app --reload --host 127.0.0.1 --port 9000
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec python -m uvicorn main:app --host 0.0.0.0 --port "${PORT:-8000}"

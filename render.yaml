@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: rps-arena
+    runtime: python
+    autoDeploy: true
+    buildCommand: pip install -r deployment/requirements.txt
+    startCommand: cd deployment/src/server && python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: RPS_DB_PATH
+        value: /var/data/state.db
+      - key: RPS_INPUT_MODES
+        value: buttons,vision,audio
+      - key: RPS_CORS_ORIGINS
+        value: "*"
+      - key: RPS_ADMIN_USERNAME
+        sync: false
+      - key: RPS_ADMIN_PASSWORD
+        sync: false
+      - key: RPS_USERS_JSON
+        sync: false
+    disk:
+      name: rps-data
+      mountPath: /var/data
+      sizeGB: 1
