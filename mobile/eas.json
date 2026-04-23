@@ -16,11 +16,17 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://vu-rsp-dc-live.onrender.com"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://vu-rsp-dc-live.onrender.com"
+      },
       "android": {
         "buildType": "app-bundle"
       }
