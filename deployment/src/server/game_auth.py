@@ -3,6 +3,7 @@ Game user authentication: pre-provisioned users from config file.
 Valid credentials are required to create sessions and play.
 """
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -15,26 +16,45 @@ USERS_CONFIG_PATH = Path(__file__).parent / "users_config.json"
 DEFAULT_USERS = {"guest": "guest"}
 
 _security = HTTPBasic()
-_cached: Optional[dict[str, str]] = None
+_cached: Optional[tuple[str, dict[str, str]]] = None
+
+
+def _normalize_users(data: object) -> dict[str, str]:
+    if isinstance(data, dict):
+        users = {str(k).strip(): str(v) for k, v in data.items() if k and v is not None}
+        if users:
+            return users
+    return dict(DEFAULT_USERS)
 
 
 def _load_users() -> dict[str, str]:
     """Load username -> password map from users_config.json. Uses DEFAULT_USERS if file missing."""
     global _cached
-    if _cached is not None:
-        return _cached
+    env_users_json = (os.getenv("RPS_USERS_JSON") or "").strip()
+    if env_users_json:
+        cache_key = f"env:{env_users_json}"
+        if _cached is not None and _cached[0] == cache_key:
+            return _cached[1]
+        try:
+            users = _normalize_users(json.loads(env_users_json))
+        except json.JSONDecodeError:
+            users = dict(DEFAULT_USERS)
+        _cached = (cache_key, users)
+        return users
+
     if not USERS_CONFIG_PATH.exists():
-        _cached = dict(DEFAULT_USERS)
-        return _cached
+        users = dict(DEFAULT_USERS)
+        _cached = ("default", users)
+        return users
+
     try:
         data = json.loads(USERS_CONFIG_PATH.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            _cached = {str(k).strip(): str(v) for k, v in data.items() if k and v is not None}
-        else:
-            _cached = dict(DEFAULT_USERS)
+        users = _normalize_users(data)
     except (json.JSONDecodeError, OSError):
-        _cached = dict(DEFAULT_USERS)
-    return _cached
+        users = dict(DEFAULT_USERS)
+
+    _cached = (f"file:{USERS_CONFIG_PATH}", users)
+    return users
 
 
 def verify_game_user(credentials: HTTPBasicCredentials = Depends(_security)) -> str:

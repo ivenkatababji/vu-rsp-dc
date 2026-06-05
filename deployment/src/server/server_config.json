@@ -1,3 +1,4 @@
 {
-  "db_path": "state.db"
+  "db_path": "state.db",
+  "input_modes": ["buttons", "vision", "audio"]
 }

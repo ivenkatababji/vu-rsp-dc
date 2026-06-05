@@ -2,6 +2,7 @@
 Admin authentication: load credentials from config file and verify HTTP Basic Auth.
 """
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -11,13 +12,21 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 ADMIN_CONFIG_PATH = Path(__file__).parent / "admin_config.json"
 
 _security = HTTPBasic()
-_cached: Optional[tuple[str, str]] = None
+_cached: Optional[tuple[str, Optional[tuple[str, str]]]] = None
 
 
 def _load_credentials() -> Optional[tuple[str, str]]:
     global _cached
-    if _cached is not None:
-        return _cached
+    env_username = (os.getenv("RPS_ADMIN_USERNAME") or "").strip()
+    env_password = (os.getenv("RPS_ADMIN_PASSWORD") or "").strip()
+    if env_username and env_password:
+        cache_key = f"env:{env_username}:{env_password}"
+        creds = (env_username, env_password)
+        if _cached is not None and _cached[0] == cache_key:
+            return _cached[1]
+        _cached = (cache_key, creds)
+        return creds
+
     if not ADMIN_CONFIG_PATH.exists():
         return None
     try:
@@ -25,8 +34,9 @@ def _load_credentials() -> Optional[tuple[str, str]]:
         username = (data.get("admin_username") or "").strip()
         password = (data.get("admin_password") or "").strip()
         if username and password:
-            _cached = (username, password)
-            return _cached
+            creds = (username, password)
+            _cached = (f"file:{ADMIN_CONFIG_PATH}", creds)
+            return creds
     except (json.JSONDecodeError, OSError):
         pass
     return None

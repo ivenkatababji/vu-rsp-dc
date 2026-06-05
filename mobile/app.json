@@ -1,0 +1,69 @@
+{
+  "expo": {
+    "name": "RPS Snip Snap Smash",
+    "slug": "rps-snip-snap-smash",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "rpssnipsnapsmash",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0d1117"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.surajcreation.rpssnipsnapsmash",
+      "infoPlist": {
+        "NSCameraUsageDescription": "RPS Snip Snap Smash uses the camera to classify rock, paper, or scissors gestures.",
+        "NSMicrophoneUsageDescription": "RPS Snip Snap Smash uses the microphone for voice move input.",
+        "NSSpeechRecognitionUsageDescription": "RPS Snip Snap Smash uses speech recognition to turn your spoken move into gameplay.",
+        "NSPhotoLibraryUsageDescription": "RPS Snip Snap Smash lets you import an image for vision-based move prediction."
+      }
+    },
+    "android": {
+      "package": "com.surajcreation.rpssnipsnapsmash",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0d1117"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+      "expo-speech-recognition",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "RPS Snip Snap Smash uses the camera to classify rock, paper, or scissors gestures."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "RPS Snip Snap Smash lets you import an image for vision-based move prediction."
+        }
+      ],
+      [
+        "./plugins/withAndroidArchitectures",
+        {
+          "architectures": "arm64-v8a"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5d2ac575-450b-4349-866c-98a2fba2e167"
+      }
+    },
+    "owner": "surajcreation"
+  }
+}

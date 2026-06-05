@@ -1,4 +1,5 @@
 {
   "db_path": ":memory:",
+  "input_modes": ["buttons", "vision", "audio"],
   "vision_input_size": 224
 }

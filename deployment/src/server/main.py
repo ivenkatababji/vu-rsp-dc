@@ -1,11 +1,13 @@
 import hashlib
 import json
+import os
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
@@ -18,7 +20,20 @@ import ml_manifest
 
 app = FastAPI(title="Rock Paper Scissors ML Experiment")
 
+_cors_origins_raw = os.getenv("RPS_CORS_ORIGINS", "*")
+_cors_origins = [origin.strip() for origin in _cors_origins_raw.split(",") if origin.strip()]
+if not _cors_origins:
+    _cors_origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 _VALID_INPUT_MODES = frozenset({"buttons", "vision", "audio"})
+_VALID_PLAY_MOVES = frozenset({"rock", "paper", "scissors", "none"})
 
 
 def _normalize_input_modes(modes: list[str]) -> list[str]:
@@ -39,26 +54,75 @@ SessionState = dict
 _SERVER_CONFIG_PATH = Path(__file__).parent / "server_config.json"
 
 
+def _parse_input_modes(raw: Any) -> Optional[list[str]]:
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        parts = [part.strip() for part in raw.split(",") if part.strip()]
+        return parts or None
+    if isinstance(raw, list):
+        parts = [str(part).strip() for part in raw if str(part).strip()]
+        return parts or None
+    return None
+
+
 def _load_server_config() -> dict[str, Any]:
     """Load server config from server_config.json. Missing file or key => defaults."""
+    config: dict[str, Any] = {"db_path": ":memory:"}
     if not _SERVER_CONFIG_PATH.exists():
-        return {"db_path": ":memory:"}
-    try:
-        data = json.loads(_SERVER_CONFIG_PATH.read_text(encoding="utf-8"))
-        return {"db_path": data.get("db_path") or ":memory:"}
-    except (json.JSONDecodeError, OSError):
-        return {"db_path": ":memory:"}
+        pass
+    else:
+        try:
+            data = json.loads(_SERVER_CONFIG_PATH.read_text(encoding="utf-8"))
+            config.update(
+                {
+                    "db_path": data.get("db_path") or ":memory:",
+                    "input_modes": _parse_input_modes(data.get("input_modes")),
+                }
+            )
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    env_db_path = (os.getenv("RPS_DB_PATH") or "").strip()
+    if env_db_path:
+        config["db_path"] = env_db_path
+
+    env_input_modes = _parse_input_modes(os.getenv("RPS_INPUT_MODES"))
+    if env_input_modes:
+        config["input_modes"] = env_input_modes
+
+    return config
 
 
 @app.on_event("startup")
 def startup():
     config = _load_server_config()
     db.init_db(path=config.get("db_path"))
+    configured_modes = config.get("input_modes")
+    if isinstance(configured_modes, list) and configured_modes:
+        db.set_config(input_modes=_normalize_input_modes([str(mode) for mode in configured_modes]))
+
+
+@app.get("/", include_in_schema=False)
+def root_redirect():
+    return RedirectResponse(url="/game", status_code=302)
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    config = db.get_config()
+    return {
+        "status": "ok",
+        "input_modes": _normalize_input_modes(config.get("input_modes") or ["buttons"]),
+        "vision_model_available": ml_manifest.model_file_for_kind("vision") is not None,
+        "audio_model_available": ml_manifest.model_file_for_kind("audio") is not None,
+    }
 
 
 class PlayRequest(BaseModel):
     session_id: str
-    image: str
+    image: Optional[str] = None
+    move: Optional[str] = None
 
 
 class PlayRoundResponse(BaseModel):
@@ -217,6 +281,12 @@ def _get_session(session_id: str) -> SessionState:
     return state
 
 
+def _assert_session_owner(state: SessionState, username: str) -> None:
+    owner = state.get("user_id")
+    if not owner or owner != username:
+        raise HTTPException(status_code=403, detail="Session does not belong to authenticated user")
+
+
 @app.get("/me/ml/manifest")
 def get_ml_manifest(username: str = Depends(verify_game_user)):
     """
@@ -285,9 +355,10 @@ def _max_rounds_for(state: SessionState) -> int:
 
 
 @app.get("/sessions/{session_id}", response_model=SessionStatus)
-def get_session(session_id: str, _username: str = Depends(verify_game_user)):
+def get_session(session_id: str, username: str = Depends(verify_game_user)):
     """Get current status and full history for a session. Requires game user auth."""
     state = _get_session(session_id)
+    _assert_session_owner(state, username)
     max_rounds = _max_rounds_for(state)
     return SessionStatus(
         session_id=session_id,
@@ -301,18 +372,27 @@ def get_session(session_id: str, _username: str = Depends(verify_game_user)):
     )
 
 
-def _run_one_play_round(session_id: str, image: str) -> Optional[dict[str, Any]]:
+def _run_one_play_round(
+    session_id: str,
+    image: str,
+    username: str,
+    explicit_move: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
     """
     Play one round for an active session. Returns response dict, or None if match already complete.
     """
     state = _get_session(session_id)
+    _assert_session_owner(state, username)
     now = time.time()
     max_rounds = _max_rounds_for(state)
 
     if state["round_number"] >= max_rounds:
         return None
 
-    player_move = classify_image(image)
+    if explicit_move in ("rock", "paper", "scissors"):
+        player_move = explicit_move
+    else:
+        player_move = classify_image(image)
     server_move = random_move()
     round_winner = decide_winner(player_move, server_move)
 
@@ -377,9 +457,30 @@ def _run_one_play_round(session_id: str, image: str) -> Optional[dict[str, Any]]
 
 
 @app.post("/play", response_model=PlayRoundResponse)
-def play(req: PlayRequest, _username: str = Depends(verify_game_user)):
+def play(req: PlayRequest, username: str = Depends(verify_game_user)):
     """Play one round in the given session. Requires game user auth."""
-    out = _run_one_play_round(req.session_id, req.image)
+    move = (req.move or "").strip().lower()
+    explicit_move: Optional[str] = None
+    image_stub = req.image or ""
+
+    if move:
+        if move not in _VALID_PLAY_MOVES:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid move. Use rock, paper, scissors, or none.",
+            )
+        if move != "none":
+            explicit_move = move
+            image_stub = move
+        else:
+            image_stub = ""
+
+    out = _run_one_play_round(
+        req.session_id,
+        image_stub,
+        username,
+        explicit_move=explicit_move,
+    )
     if out is None:
         raise HTTPException(
             status_code=400,
